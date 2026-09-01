@@ -115,6 +115,7 @@ const InstanceEditor = () => {
                 minimap: { enabled: false },
                 fontSize: 13,
                 scrollBeyondLastLine: false,
+                stickyScroll: { enabled: false },
               }}
             />
           )
@@ -128,6 +129,7 @@ const InstanceEditor = () => {
               minimap: { enabled: false },
               fontSize: 13,
               scrollBeyondLastLine: false,
+              stickyScroll: { enabled: false },
             }}
           />
         )}

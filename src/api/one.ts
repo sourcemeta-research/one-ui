@@ -5,6 +5,7 @@ import type {
   HealthReport,
   ProblemDetails,
   SchemaMetadata,
+  SchemaPositions,
   SearchResult,
   TraceResult,
 } from "../types/one";
@@ -98,6 +99,12 @@ export const evaluateSchema = (
     headers: { "Content-Type": "application/json" },
     body: instance,
   });
+
+export const getSchemaPositions = (
+  registryUrl: string,
+  schemaPath: string
+): Promise<SchemaPositions> =>
+  request(registryUrl, `/self/v1/api/schemas/positions${schemaPath}`);
 
 export const traceSchema = (
   registryUrl: string,

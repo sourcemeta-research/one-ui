@@ -117,6 +117,8 @@ export type HealthReport = {
   errors: LintFinding[];
 };
 
+export type SchemaPositions = Record<string, [number, number, number, number]>;
+
 export type ProblemDetails = {
   type: string;
   title: string;

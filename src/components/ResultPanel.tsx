@@ -43,6 +43,7 @@ const ResultPanel = () => {
     traceResult,
     resultLoading,
     resultError,
+    openDebugger,
   } = useContext(AppContext);
 
   return (
@@ -102,6 +103,12 @@ const ResultPanel = () => {
               {traceResult.valid ? "✓ Valid" : "✗ Invalid"} ·{" "}
               {traceResult.steps.length} steps
             </p>
+            <button
+              onClick={openDebugger}
+              className="h-8 px-3 text-sm rounded-[var(--radius-sm)] border border-[var(--accent)]/50 bg-[var(--accent)]/12 text-[var(--accent)] hover:bg-[var(--accent)]/20 transition-colors self-start"
+            >
+              Open Step Debugger →
+            </button>
             {traceResult.steps.map((step, i) => (
               <TraceStepRow key={i} step={step} index={i} />
             ))}

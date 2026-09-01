@@ -69,6 +69,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [resultLoading, setResultLoading] = useState(false);
   const [resultError, setResultError] = useState<string | null>(null);
 
+  const [debuggerOpen, setDebuggerOpen] = useState(false);
+  const openDebugger = useCallback(() => setDebuggerOpen(true), []);
+  const closeDebugger = useCallback(() => setDebuggerOpen(false), []);
+
   useEffect(() => {
     if (!selectedSchemaPath) {
       setSchemaMetadata(null);
@@ -208,6 +212,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     resultError,
     runEvaluate,
     runTrace,
+    debuggerOpen,
+    openDebugger,
+    closeDebugger,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

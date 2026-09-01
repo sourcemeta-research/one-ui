@@ -47,6 +47,10 @@ type AppContextType = {
 
   runEvaluate: () => void;
   runTrace: () => void;
+
+  debuggerOpen: boolean;
+  openDebugger: () => void;
+  closeDebugger: () => void;
 };
 
 export const AppContext = createContext<AppContextType>(
