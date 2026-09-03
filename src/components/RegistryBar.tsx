@@ -2,7 +2,7 @@ import { useContext, useState } from "react";
 import { AppContext } from "../contexts/AppContext";
 import Logo from "./Logo";
 
-const RegistryBar = () => {
+const RegistryBar = ({ onOpenCustomDebugger }: { onOpenCustomDebugger: () => void }) => {
   const { registryUrl, setRegistryUrl } = useContext(AppContext);
   const [draft, setDraft] = useState(registryUrl);
 
@@ -31,6 +31,13 @@ const RegistryBar = () => {
         className="h-8 px-3 text-sm rounded-[var(--radius-sm)] border border-[var(--border-strong)] bg-[var(--bg-inset)] text-[var(--text)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
       >
         Connect
+      </button>
+      <button
+        type="button"
+        onClick={onOpenCustomDebugger}
+        className="h-8 px-3 text-sm rounded-[var(--radius-sm)] border border-[var(--accent)]/50 bg-[var(--accent)]/12 text-[var(--accent)] hover:bg-[var(--accent)]/20 transition-colors whitespace-nowrap"
+      >
+        Custom Debugger
       </button>
     </form>
   );

@@ -7,10 +7,12 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "compile-server": "node server/compile-server.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
+    "@sourcemeta/jsonschema": "^16.9.0",
     "@tailwindcss/vite": "^4.3.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

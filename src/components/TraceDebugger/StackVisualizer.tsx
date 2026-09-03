@@ -16,15 +16,17 @@ const StackVisualizer = ({ frames }: { frames: OpenFrame[] }) => (
         Stack is empty — step forward to begin
       </span>
     )}
-    {frames.map((frame, depth) => (
+    {frames.map((frame, depth) => {
+      const distanceFromTop = frames.length - 1 - depth;
+      return (
       <div
         key={frame.pushIndex}
         className={`w-[min(90%,26rem)] shrink-0 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-mono shadow-[var(--shadow-md)] transition-all duration-300 ease-out ${statusStyle[frame.status]}`}
         style={{
-          transform: `translateZ(${-depth * 34}px) translateY(${-depth * 10}px) scale(${Math.max(1 - depth * 0.035, 0.7)})`,
-          opacity: Math.max(1 - depth * 0.08, 0.35),
+          transform: `translateZ(${-distanceFromTop * 34}px) translateY(${-distanceFromTop * 10}px) scale(${Math.max(1 - distanceFromTop * 0.035, 0.7)})`,
+          opacity: Math.max(1 - distanceFromTop * 0.08, 0.35),
           marginTop: depth === 0 ? 0 : -28,
-          zIndex: frames.length - depth,
+          zIndex: depth + 1,
         }}
       >
         <div className="flex items-center justify-between gap-2">
@@ -36,7 +38,8 @@ const StackVisualizer = ({ frames }: { frames: OpenFrame[] }) => (
         <div className="truncate font-semibold">{frame.name}</div>
         <div className="truncate opacity-70">{frame.evaluatePath}</div>
       </div>
-    ))}
+      );
+    })}
   </div>
 );
 
