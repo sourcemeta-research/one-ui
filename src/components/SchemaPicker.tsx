@@ -4,6 +4,17 @@ import { listDirectory, searchSchemas } from "../api/one";
 import type { DirectoryEntry, SearchResult } from "../types/one";
 import DirectoryNode from "./DirectoryNode";
 
+const describeError = (err: unknown, registryUrl: string): string => {
+  const message = err instanceof Error ? err.message : String(err);
+  // A raw fetch failure (unreachable host, CORS, offline) surfaces as the
+  // browser's generic "NetworkError"/"Failed to fetch" — not useful on its
+  // own, especially with the default localhost registry on a hosted deploy.
+  if (/networkerror|failed to fetch/i.test(message)) {
+    return `Couldn't reach the registry at ${registryUrl}. Make sure it's running and reachable, or click "Connect" to point at a different URL.`;
+  }
+  return message;
+};
+
 const SchemaPicker = () => {
   const { registryUrl, selectedSchemaPath, setSelectedSchemaPath } =
     useContext(AppContext);
@@ -24,8 +35,7 @@ const SchemaPicker = () => {
         if (!cancelled) setRootEntries(listing.entries);
       })
       .catch((err: unknown) => {
-        if (!cancelled)
-          setError(err instanceof Error ? err.message : String(err));
+        if (!cancelled) setError(describeError(err, registryUrl));
       });
     return () => {
       cancelled = true;
