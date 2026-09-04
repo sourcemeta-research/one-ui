@@ -1,28 +1,43 @@
-import { useMemo, useRef, useState, useEffect } from "react";
+import { useCallback, useMemo, useRef, useState, useEffect } from "react";
 import Editor, { type Monaco } from "@monaco-editor/react";
 import type { editor as MonacoEditor } from "monaco-editor";
-import { traceCustom } from "../../api/customTrace";
-import type { TraceResult } from "../../types/one";
+import { traceCustom, type TraceResult } from "../../lib/blaze";
 import { defineMonacoTheme, ONE_UI_MONACO_THEME } from "../../utils/monacoTheme";
-import { getOpenFrames } from "../../utils/traceStack";
+import { getOpenFrames } from "./traceStack";
 import { computeJsonPositions } from "../../utils/jsonPointerPositions";
+import { resolveEvaluatePath } from "./resolveEvaluatePath";
+import type { SchemaPositions } from "../../types/one";
 import StackVisualizer from "../TraceDebugger/StackVisualizer";
 
 const PLAY_INTERVAL_MS = 700;
-const SERVER_URL_KEY = "one-ui.customDebuggerServerUrl";
-const DEFAULT_SERVER_URL = "http://localhost:4545";
 
 const DEFAULT_SCHEMA = `{
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
-    "age": { "type": "integer", "minimum": 0 }
+    "engineer": { "type": "string", "minLength": 1 },
+    "project": { "type": "string", "enum": ["one-ui", "studio-json-schema", "blaze"] },
+    "task": { "type": "string" },
+    "date": { "type": "string", "format": "date" },
+    "planet": { "const": "Earth" },
+    "company": { "type": "string" },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    }
   },
-  "required": ["age"]
+  "required": ["engineer", "project", "task", "date", "planet", "company"]
 }`;
 
 const DEFAULT_INSTANCE = `{
-  "age": "thirty"
+  "engineer": "Sumit",
+  "project": "one-ui",
+  "task": "Blaze integration",
+  "date": "2026-09-04",
+  "planet": "Earth",
+  "company": "Sourcemeta",
+  "tags": ["wasm", "browser", "debugger"]
 }`;
 
 const toMonacoRange = (position: [number, number, number, number]) => ({
@@ -41,15 +56,7 @@ const highlightClass = (type: "push" | "pass" | "fail") =>
       ? "trace-highlight-pass"
       : "trace-highlight-push";
 
-const keywordPointer = (keywordLocation: string): string => {
-  const hashIndex = keywordLocation.indexOf("#");
-  return hashIndex === -1 ? "" : keywordLocation.slice(hashIndex + 1) || "";
-};
-
 const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
-  const [serverUrl, setServerUrl] = useState(
-    () => localStorage.getItem(SERVER_URL_KEY) ?? DEFAULT_SERVER_URL
-  );
   const [schemaText, setSchemaText] = useState(DEFAULT_SCHEMA);
   const [instanceText, setInstanceText] = useState(DEFAULT_INSTANCE);
   const [traceResult, setTraceResult] = useState<TraceResult | null>(null);
@@ -58,7 +65,6 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
 
   const [stepIndex, setStepIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [schemaHighlightNote, setSchemaHighlightNote] = useState<string | null>(null);
 
   const instanceEditorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
   const instanceDecorationsRef = useRef<MonacoEditor.IEditorDecorationsCollection | null>(null);
@@ -88,10 +94,30 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
     }
   }, [instanceText]);
 
-  const handleServerUrlChange = (url: string) => {
-    setServerUrl(url);
-    localStorage.setItem(SERVER_URL_KEY, url);
-  };
+  const schemaJson = useMemo(() => {
+    try {
+      return JSON.parse(schemaText) as unknown;
+    } catch {
+      return null;
+    }
+  }, [schemaText]);
+
+  // A step's evaluatePath crosses "$ref" hops that don't line up with the
+  // pasted text's own JSON pointers (see resolveEvaluatePath.ts) — try the
+  // literal path first, then follow any $refs before giving up.
+  const locateSchemaPosition = useCallback(
+    (
+      evaluatePath: string,
+      positions: SchemaPositions
+    ): [number, number, number, number] | null => {
+      const direct = positions[evaluatePath];
+      if (direct) return direct;
+      if (schemaJson === null) return null;
+      const resolved = resolveEvaluatePath(schemaJson, evaluatePath);
+      return resolved !== null ? (positions[resolved] ?? null) : null;
+    },
+    [schemaJson]
+  );
 
   const runTrace = async () => {
     setLoading(true);
@@ -99,7 +125,7 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
     setStepIndex(0);
     setIsPlaying(false);
     try {
-      const result = await traceCustom(serverUrl, schemaText, instanceText);
+      const result = await traceCustom(schemaText, instanceText);
       setTraceResult(result);
     } catch (err) {
       setTraceResult(null);
@@ -112,8 +138,8 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
   useEffect(() => {
     if (!isPlaying) return;
     if (stepIndex >= steps.length - 1) {
-      setIsPlaying(false);
-      return;
+      const timer = setTimeout(() => setIsPlaying(false), 0);
+      return () => clearTimeout(timer);
     }
     const timer = setTimeout(() => setStepIndex((i) => i + 1), PLAY_INTERVAL_MS);
     return () => clearTimeout(timer);
@@ -141,25 +167,23 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
     editorInstance.revealRangeInCenterIfOutsideViewport(range);
   }, [currentStep, instancePositions]);
 
+  const schemaHighlightNote = useMemo(() => {
+    if (!currentStep) return null;
+    const position = locateSchemaPosition(currentStep.evaluatePath, schemaPositions);
+    return position
+      ? null
+      : "Could not locate this keyword in the schema text (it's likely a $ref into another document).";
+  }, [currentStep, schemaPositions, locateSchemaPosition]);
+
   useEffect(() => {
     const editorInstance = schemaEditorRef.current;
-    if (!editorInstance || !currentStep) {
-      setSchemaHighlightNote(null);
-      return;
-    }
+    if (!editorInstance || !currentStep) return;
 
-    const pointer = keywordPointer(currentStep.keywordLocation);
-    const position = schemaPositions[pointer];
+    const position = locateSchemaPosition(currentStep.evaluatePath, schemaPositions);
     schemaDecorationsRef.current?.clear();
 
-    if (!position) {
-      setSchemaHighlightNote(
-        "Could not locate this keyword in the schema text (it may come from an external $ref)."
-      );
-      return;
-    }
+    if (!position) return;
 
-    setSchemaHighlightNote(null);
     const range = toMonacoRange(position);
     schemaDecorationsRef.current = editorInstance.createDecorationsCollection([
       {
@@ -172,7 +196,7 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
       },
     ]);
     editorInstance.revealRangeInCenterIfOutsideViewport(range);
-  }, [currentStep, schemaPositions]);
+  }, [currentStep, schemaPositions, locateSchemaPosition]);
 
   const beforeMount = (monaco: Monaco) => defineMonacoTheme(monaco);
 
@@ -209,16 +233,10 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
           </button>
           <span className="text-sm font-medium truncate">Custom Debugger</span>
           <span className="text-[10px] text-[var(--text-secondary)] hidden md:inline">
-            Paste any schema + instance and step through the real Blaze evaluation
+            Paste any schema + instance and step through the real Blaze evaluation — runs entirely in your browser
           </span>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <input
-            value={serverUrl}
-            onChange={(e) => handleServerUrlChange(e.target.value)}
-            placeholder="http://localhost:4545"
-            className="h-8 w-52 px-2 text-xs rounded-[var(--radius-sm)] border border-[var(--border-strong)] bg-[var(--bg-inset)] text-[var(--text)] font-mono focus:outline-none focus:border-[var(--accent)]"
-          />
           <button
             onClick={runTrace}
             disabled={loading}
@@ -242,8 +260,7 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
 
       {error && (
         <div className="px-4 py-2 text-xs text-[var(--danger)] bg-[var(--danger-soft)] border-b border-[var(--danger)]/40">
-          {error}. Make sure the local compile server is running:{" "}
-          <span className="font-mono">npm run compile-server</span>
+          {error}
         </div>
       )}
 
