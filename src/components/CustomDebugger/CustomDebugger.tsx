@@ -1,7 +1,6 @@
-import { useContext, useMemo, useRef, useState, useEffect } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import Editor, { type Monaco } from "@monaco-editor/react";
 import type { editor as MonacoEditor } from "monaco-editor";
-import { AppContext } from "../../contexts/AppContext";
 import { traceCustomSchema } from "../../api/one";
 import { defineMonacoTheme, ONE_UI_MONACO_THEME } from "../../utils/monacoTheme";
 import { getOpenFrames } from "../../utils/traceStack";
@@ -10,6 +9,13 @@ import type { TraceResult } from "../../types/one";
 import StackVisualizer from "../TraceDebugger/StackVisualizer";
 
 const PLAY_INTERVAL_MS = 700;
+const API_URL_KEY = "one-ui.customDebuggerApiUrl";
+// Sourcemeta's own public instance — works standalone for any pasted
+// schema, no setup required, and still resolves $refs correctly if a
+// schema happens to reference something hosted there. Independent of
+// whatever "Registry" the rest of the app is connected to (or isn't), so
+// the debugger keeps working with zero setup either way.
+const DEFAULT_API_URL = "https://schemas.sourcemeta.com";
 
 const DEFAULT_SCHEMA = `{
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -65,7 +71,9 @@ const localKeywordPointer = (keywordLocation: string): string | null =>
   keywordLocation.startsWith("#") ? keywordLocation.slice(1) : null;
 
 const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
-  const { registryUrl } = useContext(AppContext);
+  const [apiUrl, setApiUrl] = useState(
+    () => localStorage.getItem(API_URL_KEY) ?? DEFAULT_API_URL
+  );
 
   const [schemaText, setSchemaText] = useState(DEFAULT_SCHEMA);
   const [instanceText, setInstanceText] = useState(DEFAULT_INSTANCE);
@@ -122,7 +130,7 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
       } catch (parseError) {
         throw new Error(`Invalid instance JSON: ${(parseError as Error).message}`);
       }
-      setTraceResult(await traceCustomSchema(registryUrl, schema, instance));
+      setTraceResult(await traceCustomSchema(apiUrl, schema, instance));
     } catch (err) {
       setTraceResult(null);
       setError(err instanceof Error ? err.message : String(err));
@@ -200,6 +208,11 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
 
   const beforeMount = (monaco: Monaco) => defineMonacoTheme(monaco);
 
+  const handleApiUrlChange = (url: string) => {
+    setApiUrl(url);
+    localStorage.setItem(API_URL_KEY, url);
+  };
+
   const describeStep = (step: NonNullable<typeof currentStep>): string => {
     if (step.message) return step.message;
     if (step.type === "push")
@@ -237,6 +250,13 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
           </span>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <input
+            value={apiUrl}
+            onChange={(e) => handleApiUrlChange(e.target.value)}
+            placeholder={DEFAULT_API_URL}
+            title="Sourcemeta One instance to send the schema + instance to for tracing"
+            className="h-8 w-56 px-2 text-xs rounded-[var(--radius-sm)] border border-[var(--border-strong)] bg-[var(--bg-inset)] text-[var(--text)] font-mono focus:outline-none focus:border-[var(--accent)]"
+          />
           <button
             onClick={runTrace}
             disabled={loading}
