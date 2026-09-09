@@ -1,7 +1,9 @@
-import { useCallback, useMemo, useRef, useState, useEffect } from "react";
+import { useCallback, useContext, useMemo, useRef, useState, useEffect } from "react";
 import Editor, { type Monaco } from "@monaco-editor/react";
 import type { editor as MonacoEditor } from "monaco-editor";
-import { traceCustom, type TraceResult } from "../../lib/blaze";
+import { traceCustom, type TraceResult, type TraceStep } from "../../lib/blaze";
+import { AppContext } from "../../contexts/AppContext";
+import { traceCustomSchema } from "../../api/one";
 import { defineMonacoTheme, ONE_UI_MONACO_THEME } from "../../utils/monacoTheme";
 import { getOpenFrames } from "./traceStack";
 import { computeJsonPositions } from "../../utils/jsonPointerPositions";
@@ -10,6 +12,32 @@ import type { SchemaPositions } from "../../types/one";
 import StackVisualizer from "../TraceDebugger/StackVisualizer";
 
 const PLAY_INTERVAL_MS = 700;
+
+type Engine = "wasm" | "api";
+
+// The playground API returns the same richer step shape as tracing a
+// catalog schema (instancePositions/keywordLocation/annotation/vocabulary
+// included); this component only ever needs the WASM lib's minimal shape,
+// so map down to that rather than carrying two step shapes through the UI.
+const toLocalTraceResult = (result: {
+  valid: boolean;
+  steps: {
+    type: TraceStep["type"];
+    name: string;
+    evaluatePath: string;
+    instanceLocation: string;
+    message: string | null;
+  }[];
+}): TraceResult => ({
+  valid: result.valid,
+  steps: result.steps.map((step) => ({
+    type: step.type,
+    name: step.name,
+    evaluatePath: step.evaluatePath,
+    instanceLocation: step.instanceLocation,
+    message: step.message ?? "",
+  })),
+});
 
 const DEFAULT_SCHEMA = `{
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -57,8 +85,16 @@ const highlightClass = (type: "push" | "pass" | "fail") =>
       : "trace-highlight-push";
 
 const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
+  const { registryUrl } = useContext(AppContext);
+
   const [schemaText, setSchemaText] = useState(DEFAULT_SCHEMA);
   const [instanceText, setInstanceText] = useState(DEFAULT_INSTANCE);
+  // "wasm" compiles fully client-side (see src/lib/blaze). "api" calls
+  // Sourcemeta One's playground trace endpoint instead — server-side, and
+  // able to resolve $refs into schemas already in the registry, which the
+  // client-side compiler can't do. Defaulting to "wasm" until that endpoint
+  // is confirmed working on the deployed registry.
+  const [engine, setEngine] = useState<Engine>("wasm");
   const [traceResult, setTraceResult] = useState<TraceResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -125,8 +161,23 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
     setStepIndex(0);
     setIsPlaying(false);
     try {
-      const result = await traceCustom(schemaText, instanceText);
-      setTraceResult(result);
+      if (engine === "wasm") {
+        setTraceResult(await traceCustom(schemaText, instanceText));
+      } else {
+        let schema: unknown;
+        let instance: unknown;
+        try {
+          schema = JSON.parse(schemaText);
+        } catch (parseError) {
+          throw new Error(`Invalid schema JSON: ${(parseError as Error).message}`);
+        }
+        try {
+          instance = JSON.parse(instanceText);
+        } catch (parseError) {
+          throw new Error(`Invalid instance JSON: ${(parseError as Error).message}`);
+        }
+        setTraceResult(toLocalTraceResult(await traceCustomSchema(registryUrl, schema, instance)));
+      }
     } catch (err) {
       setTraceResult(null);
       setError(err instanceof Error ? err.message : String(err));
@@ -233,10 +284,34 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
           </button>
           <span className="text-sm font-medium truncate">Custom Debugger</span>
           <span className="text-[10px] text-[var(--text-secondary)] hidden md:inline">
-            Paste any schema + instance and step through the real Blaze evaluation — runs entirely in your browser
+            Paste any schema + instance and step through the real Blaze evaluation
           </span>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center rounded-[var(--radius-sm)] border border-[var(--border-strong)] bg-[var(--bg-inset)] p-0.5 text-xs">
+            <button
+              type="button"
+              onClick={() => setEngine("wasm")}
+              className={`px-2 py-1 rounded-[3px] transition-colors ${
+                engine === "wasm"
+                  ? "bg-[var(--accent)]/20 text-[var(--accent)]"
+                  : "text-[var(--text-secondary)] hover:text-[var(--text)]"
+              }`}
+            >
+              WASM (offline)
+            </button>
+            <button
+              type="button"
+              onClick={() => setEngine("api")}
+              className={`px-2 py-1 rounded-[3px] transition-colors ${
+                engine === "api"
+                  ? "bg-[var(--accent)]/20 text-[var(--accent)]"
+                  : "text-[var(--text-secondary)] hover:text-[var(--text)]"
+              }`}
+            >
+              Registry API (experimental)
+            </button>
+          </div>
           <button
             onClick={runTrace}
             disabled={loading}
