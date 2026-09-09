@@ -116,3 +116,17 @@ export const traceSchema = (
     headers: { "Content-Type": "application/json" },
     body: instance,
   });
+
+// Traces a schema supplied inline in the request rather than one already in
+// the catalog. References to catalog schemas resolve server-side; this is
+// what the Custom Debugger uses instead of compiling client-side.
+export const traceCustomSchema = (
+  registryUrl: string,
+  schema: unknown,
+  instance: unknown
+): Promise<TraceResult> =>
+  request(registryUrl, `/self/v1/api/playground/schemas/trace`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ schema, instance }),
+  });

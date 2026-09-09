@@ -1,12 +1,12 @@
-import { useCallback, useMemo, useRef, useState, useEffect } from "react";
+import { useContext, useMemo, useRef, useState, useEffect } from "react";
 import Editor, { type Monaco } from "@monaco-editor/react";
 import type { editor as MonacoEditor } from "monaco-editor";
-import { traceCustom, type TraceResult } from "../../lib/blaze";
+import { AppContext } from "../../contexts/AppContext";
+import { traceCustomSchema } from "../../api/one";
 import { defineMonacoTheme, ONE_UI_MONACO_THEME } from "../../utils/monacoTheme";
-import { getOpenFrames } from "./traceStack";
+import { getOpenFrames } from "../../utils/traceStack";
 import { computeJsonPositions } from "../../utils/jsonPointerPositions";
-import { resolveEvaluatePath } from "./resolveEvaluatePath";
-import type { SchemaPositions } from "../../types/one";
+import type { TraceResult } from "../../types/one";
 import StackVisualizer from "../TraceDebugger/StackVisualizer";
 
 const PLAY_INTERVAL_MS = 700;
@@ -56,7 +56,17 @@ const highlightClass = (type: "push" | "pass" | "fail") =>
       ? "trace-highlight-pass"
       : "trace-highlight-push";
 
+// keywordLocation is "#/json/pointer" for a keyword within the schema we
+// posted (including one reached through a same-document $ref — the server
+// resolves those to their real location), or an absolute URI into a
+// different document for a $ref into another registry schema, which this
+// debugger has no text for and so can't highlight.
+const localKeywordPointer = (keywordLocation: string): string | null =>
+  keywordLocation.startsWith("#") ? keywordLocation.slice(1) : null;
+
 const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
+  const { registryUrl } = useContext(AppContext);
+
   const [schemaText, setSchemaText] = useState(DEFAULT_SCHEMA);
   const [instanceText, setInstanceText] = useState(DEFAULT_INSTANCE);
   const [traceResult, setTraceResult] = useState<TraceResult | null>(null);
@@ -94,39 +104,25 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
     }
   }, [instanceText]);
 
-  const schemaJson = useMemo(() => {
-    try {
-      return JSON.parse(schemaText) as unknown;
-    } catch {
-      return null;
-    }
-  }, [schemaText]);
-
-  // A step's evaluatePath crosses "$ref" hops that don't line up with the
-  // pasted text's own JSON pointers (see resolveEvaluatePath.ts) — try the
-  // literal path first, then follow any $refs before giving up.
-  const locateSchemaPosition = useCallback(
-    (
-      evaluatePath: string,
-      positions: SchemaPositions
-    ): [number, number, number, number] | null => {
-      const direct = positions[evaluatePath];
-      if (direct) return direct;
-      if (schemaJson === null) return null;
-      const resolved = resolveEvaluatePath(schemaJson, evaluatePath);
-      return resolved !== null ? (positions[resolved] ?? null) : null;
-    },
-    [schemaJson]
-  );
-
   const runTrace = async () => {
     setLoading(true);
     setError(null);
     setStepIndex(0);
     setIsPlaying(false);
     try {
-      const result = await traceCustom(schemaText, instanceText);
-      setTraceResult(result);
+      let schema: unknown;
+      let instance: unknown;
+      try {
+        schema = JSON.parse(schemaText);
+      } catch (parseError) {
+        throw new Error(`Invalid schema JSON: ${(parseError as Error).message}`);
+      }
+      try {
+        instance = JSON.parse(instanceText);
+      } catch (parseError) {
+        throw new Error(`Invalid instance JSON: ${(parseError as Error).message}`);
+      }
+      setTraceResult(await traceCustomSchema(registryUrl, schema, instance));
     } catch (err) {
       setTraceResult(null);
       setError(err instanceof Error ? err.message : String(err));
@@ -169,17 +165,21 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
 
   const schemaHighlightNote = useMemo(() => {
     if (!currentStep) return null;
-    const position = locateSchemaPosition(currentStep.evaluatePath, schemaPositions);
-    return position
+    const pointer = localKeywordPointer(currentStep.keywordLocation);
+    if (pointer === null) {
+      return "This step is inside a $ref to another registry schema, so it can't be highlighted here.";
+    }
+    return schemaPositions[pointer]
       ? null
-      : "Could not locate this keyword in the schema text (it's likely a $ref into another document).";
-  }, [currentStep, schemaPositions, locateSchemaPosition]);
+      : "Could not locate this keyword in the schema text.";
+  }, [currentStep, schemaPositions]);
 
   useEffect(() => {
     const editorInstance = schemaEditorRef.current;
     if (!editorInstance || !currentStep) return;
 
-    const position = locateSchemaPosition(currentStep.evaluatePath, schemaPositions);
+    const pointer = localKeywordPointer(currentStep.keywordLocation);
+    const position = pointer !== null ? schemaPositions[pointer] : undefined;
     schemaDecorationsRef.current?.clear();
 
     if (!position) return;
@@ -196,7 +196,7 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
       },
     ]);
     editorInstance.revealRangeInCenterIfOutsideViewport(range);
-  }, [currentStep, schemaPositions, locateSchemaPosition]);
+  }, [currentStep, schemaPositions]);
 
   const beforeMount = (monaco: Monaco) => defineMonacoTheme(monaco);
 
@@ -233,7 +233,7 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
           </button>
           <span className="text-sm font-medium truncate">Custom Debugger</span>
           <span className="text-[10px] text-[var(--text-secondary)] hidden md:inline">
-            Paste any schema + instance and step through the real Blaze evaluation — runs entirely in your browser
+            Paste any schema + instance and step through the real Blaze evaluation
           </span>
         </div>
         <div className="flex items-center gap-2 shrink-0">
