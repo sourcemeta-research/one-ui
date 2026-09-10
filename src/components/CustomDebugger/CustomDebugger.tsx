@@ -3,10 +3,11 @@ import Editor, { type Monaco } from "@monaco-editor/react";
 import type { editor as MonacoEditor } from "monaco-editor";
 import { traceCustomSchema } from "../../api/one";
 import { defineMonacoTheme, ONE_UI_MONACO_THEME } from "../../utils/monacoTheme";
-import { getOpenFrames } from "../../utils/traceStack";
+import { getCollectedAnnotations, getDynamicScope, getOpenFrames } from "../../utils/traceStack";
 import { computeJsonPositions } from "../../utils/jsonPointerPositions";
 import type { TraceResult } from "../../types/one";
 import StackVisualizer from "../TraceDebugger/StackVisualizer";
+import AnnotationsPanel from "../AnnotationsPanel";
 
 const PLAY_INTERVAL_MS = 700;
 const API_URL_KEY = "one-ui.customDebuggerApiUrl";
@@ -95,6 +96,11 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
     () => getOpenFrames(steps, stepIndex),
     [steps, stepIndex]
   );
+  const collectedAnnotations = useMemo(
+    () => getCollectedAnnotations(steps, stepIndex),
+    [steps, stepIndex]
+  );
+  const dynamicScope = useMemo(() => getDynamicScope(openFrames), [openFrames]);
 
   const schemaPositions = useMemo(() => {
     try {
@@ -287,7 +293,14 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
       <div className="flex flex-1 min-h-0 gap-3 p-3">
         <div className="flex-1 min-w-0 flex flex-col rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] overflow-hidden">
           <div className="px-3 py-1.5 text-xs text-[var(--text-secondary)] border-b border-[var(--border)] flex items-center justify-between gap-2">
-            <span>Schema (editable)</span>
+            <span className="truncate">
+              Schema (editable)
+              {currentStep && (
+                <span className="ml-2 text-[var(--accent)] font-mono">
+                  {currentStep.keywordLocation || "#"}
+                </span>
+              )}
+            </span>
             {schemaHighlightNote && (
               <span className="text-[10px] text-[var(--accent)] truncate">
                 {schemaHighlightNote}
@@ -308,8 +321,13 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
         </div>
 
         <div className="flex-1 min-w-0 flex flex-col rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] overflow-hidden">
-          <div className="px-3 py-1.5 text-xs text-[var(--text-secondary)] border-b border-[var(--border)]">
+          <div className="px-3 py-1.5 text-xs text-[var(--text-secondary)] border-b border-[var(--border)] truncate">
             Instance (editable)
+            {currentStep && (
+              <span className="ml-2 text-[var(--accent)] font-mono">
+                {currentStep.instanceLocation || "/"}
+              </span>
+            )}
           </div>
           <div className="flex-1 min-h-0">
             <Editor
@@ -343,7 +361,28 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
                 <span className="w-2 h-2 rounded-full bg-[var(--danger)] inline-block" />
                 failed
               </span>
+              <span className="flex items-center gap-1 text-[var(--info)]">
+                <span className="w-2 h-2 rounded-full bg-[var(--info)] inline-block" />
+                annotation
+              </span>
             </div>
+            {dynamicScope.length > 1 && (
+              <div className="mt-2 pt-2 border-t border-[var(--border)]">
+                <div className="text-[10px] text-[var(--text-secondary)] opacity-70">
+                  Dynamic scope
+                </div>
+                <div className="flex flex-col gap-0.5 mt-1">
+                  {dynamicScope.map((resource, i) => (
+                    <span
+                      key={i}
+                      className="text-[10px] font-mono truncate text-[var(--accent)]"
+                    >
+                      {resource || "(this schema)"}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           {traceResult ? (
             <StackVisualizer frames={openFrames} />
@@ -353,6 +392,13 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
             </div>
           )}
         </div>
+
+        {traceResult && (
+          <AnnotationsPanel
+            annotations={collectedAnnotations}
+            currentInstanceLocation={currentStep?.instanceLocation}
+          />
+        )}
       </div>
 
       {traceResult && (
@@ -360,23 +406,33 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
           {currentStep && (
             <div
               className={`rounded-[var(--radius-sm)] border px-3 py-2.5 flex items-start gap-3 ${
-                currentStep.type === "fail"
-                  ? "border-[var(--danger)]/40 bg-[var(--danger-soft)]"
-                  : currentStep.type === "pass"
-                    ? "border-[var(--success)]/40 bg-[var(--success-soft)]"
-                    : "border-[var(--accent)]/40 bg-[var(--accent)]/10"
+                currentStep.annotation != null
+                  ? "border-[var(--info)]/40 bg-[var(--info-soft)]"
+                  : currentStep.type === "fail"
+                    ? "border-[var(--danger)]/40 bg-[var(--danger-soft)]"
+                    : currentStep.type === "pass"
+                      ? "border-[var(--success)]/40 bg-[var(--success-soft)]"
+                      : "border-[var(--accent)]/40 bg-[var(--accent)]/10"
               }`}
             >
               <span
                 className={`text-lg leading-none shrink-0 ${
-                  currentStep.type === "fail"
-                    ? "text-[var(--danger)]"
-                    : currentStep.type === "pass"
-                      ? "text-[var(--success)]"
-                      : "text-[var(--accent)]"
+                  currentStep.annotation != null
+                    ? "text-[var(--info)]"
+                    : currentStep.type === "fail"
+                      ? "text-[var(--danger)]"
+                      : currentStep.type === "pass"
+                        ? "text-[var(--success)]"
+                        : "text-[var(--accent)]"
                 }`}
               >
-                {currentStep.type === "fail" ? "✗" : currentStep.type === "pass" ? "✓" : "▶"}
+                {currentStep.annotation != null
+                  ? "𝒾"
+                  : currentStep.type === "fail"
+                    ? "✗"
+                    : currentStep.type === "pass"
+                      ? "✓"
+                      : "▶"}
               </span>
               <div className="min-w-0">
                 <div className="text-sm font-medium">
