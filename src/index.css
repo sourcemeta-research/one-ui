@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+/* Tailwind's preflight resets button cursor to "default" for cross-browser
+   consistency; every button here is actually clickable, so restore the
+   pointer hand instead of leaving it feeling inert. */
+button:not(:disabled),
+[role="button"]:not(:disabled) {
+  cursor: pointer;
+}
+
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
