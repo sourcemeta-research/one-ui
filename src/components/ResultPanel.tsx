@@ -2,25 +2,22 @@ import { useContext } from "react";
 import { AppContext } from "../contexts/AppContext";
 import type { TraceStep } from "../types/one";
 
-const stepStyle: Record<TraceStep["type"], string> = {
-  push: "text-[var(--text-secondary)] border-[var(--border)]",
-  pass: "text-[var(--success)] border-[var(--success)]/40 bg-[var(--success-soft)]",
-  fail: "text-[var(--danger)] border-[var(--danger)]/40 bg-[var(--danger-soft)]",
-};
+const stepStyle =
+  "text-[var(--text-secondary)] border-[var(--border)] bg-[var(--bg-inset)]/50";
 
 const badgeStyle: Record<TraceStep["type"], string> = {
-  push: "text-[var(--text-secondary)] bg-[var(--bg-inset)] border-[var(--border-strong)]/60",
-  pass: "text-[var(--success)] bg-[var(--success)]/15 border-[var(--success)]/40",
-  fail: "text-[var(--danger)] bg-[var(--danger)]/15 border-[var(--danger)]/40",
+  push: "text-[var(--text-secondary)] bg-[var(--bg-inset)] border-[var(--border-strong)]",
+  pass: "text-[var(--success)] bg-[var(--success)]/20 border-[var(--success)]/60",
+  fail: "text-[var(--danger)] bg-[var(--danger)]/20 border-[var(--danger)]/60",
 };
 
 const TraceStepRow = ({ step, index }: { step: TraceStep; index: number }) => (
   <div
-    className={`text-xs border rounded-[var(--radius-sm)] px-2 py-1.5 ${stepStyle[step.type]}`}
+    className={`text-xs border rounded-[var(--radius-sm)] px-2 py-1.5 ${stepStyle}`}
   >
     <div className="flex items-center gap-2">
       <span
-        className={`uppercase font-mono text-[10px] font-semibold tracking-wide px-1.5 py-0.5 rounded-full border shrink-0 ${badgeStyle[step.type]}`}
+        className={`uppercase text-xs font-bold tracking-wide px-2.5 py-1 rounded-full border shrink-0 ${badgeStyle[step.type]}`}
       >
         {step.type}
       </span>

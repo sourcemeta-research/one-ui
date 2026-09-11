@@ -3,7 +3,7 @@ import Editor from "@monaco-editor/react";
 import { AppContext } from "../contexts/AppContext";
 import MetadataTable from "./MetadataTable";
 import DetailPanel from "./DetailPanel";
-import { defineMonacoTheme, ONE_UI_MONACO_THEME } from "../utils/monacoTheme";
+import { defineMonacoTheme, ONE_UI_EDITOR_FONT_OPTIONS, ONE_UI_MONACO_THEME } from "../utils/monacoTheme";
 import IdleState from "./IdleState";
 
 const InstanceEditor = () => {
@@ -111,9 +111,10 @@ const InstanceEditor = () => {
               beforeMount={defineMonacoTheme}
               value={schemaContent ?? ""}
               options={{
+                ...ONE_UI_EDITOR_FONT_OPTIONS,
                 readOnly: true,
                 minimap: { enabled: false },
-                fontSize: 13,
+                fontSize: 14,
                 scrollBeyondLastLine: false,
                 stickyScroll: { enabled: false },
               }}
@@ -126,8 +127,9 @@ const InstanceEditor = () => {
             value={instanceText}
             onChange={(value) => setInstanceText(value ?? "")}
             options={{
+              ...ONE_UI_EDITOR_FONT_OPTIONS,
               minimap: { enabled: false },
-              fontSize: 13,
+              fontSize: 14,
               scrollBeyondLastLine: false,
               stickyScroll: { enabled: false },
             }}

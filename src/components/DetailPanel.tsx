@@ -59,7 +59,7 @@ const DetailPanel = () => {
         />
       </div>
 
-      <div className="p-2">
+      <div className="p-2 h-48 min-h-32 max-h-128 resize-y overflow-y-auto">
         {detailLoading && (
           <p className="text-xs text-[var(--text-secondary)] px-1">
             Loading…

@@ -2,12 +2,13 @@ import { useMemo, useRef, useState, useEffect } from "react";
 import Editor, { type Monaco } from "@monaco-editor/react";
 import type { editor as MonacoEditor } from "monaco-editor";
 import { traceCustomSchema } from "../../api/one";
-import { defineMonacoTheme, ONE_UI_MONACO_THEME } from "../../utils/monacoTheme";
+import { defineMonacoTheme, ONE_UI_EDITOR_FONT_OPTIONS, ONE_UI_MONACO_THEME } from "../../utils/monacoTheme";
 import { getCollectedAnnotations, getDynamicScope, getOpenFrames } from "../../utils/traceStack";
 import { computeJsonPositions } from "../../utils/jsonPointerPositions";
 import type { TraceResult } from "../../types/one";
 import StackVisualizer from "../TraceDebugger/StackVisualizer";
 import AnnotationsPanel from "../AnnotationsPanel";
+import { STACK_FONT_KEY, STACK_FONT_OPTIONS, getStoredStackFont } from "../../utils/stackFont";
 
 const PLAY_INTERVAL_MS = 700;
 const API_URL_KEY = "one-ui.customDebuggerApiUrl";
@@ -83,6 +84,7 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
   const [error, setError] = useState<string | null>(null);
 
   const [stepIndex, setStepIndex] = useState(0);
+  const [stackFont, setStackFont] = useState(getStoredStackFont);
   const [isPlaying, setIsPlaying] = useState(false);
 
   const instanceEditorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
@@ -315,7 +317,7 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
               value={schemaText}
               onChange={(value) => setSchemaText(value ?? "")}
               onMount={(editorInstance) => (schemaEditorRef.current = editorInstance)}
-              options={{ minimap: { enabled: false }, fontSize: 12.5, stickyScroll: { enabled: false } }}
+              options={{ ...ONE_UI_EDITOR_FONT_OPTIONS, minimap: { enabled: false }, fontSize: 13.5, stickyScroll: { enabled: false } }}
             />
           </div>
         </div>
@@ -337,18 +339,35 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
               value={instanceText}
               onChange={(value) => setInstanceText(value ?? "")}
               onMount={(editorInstance) => (instanceEditorRef.current = editorInstance)}
-              options={{ minimap: { enabled: false }, fontSize: 12.5, stickyScroll: { enabled: false } }}
+              options={{ ...ONE_UI_EDITOR_FONT_OPTIONS, minimap: { enabled: false }, fontSize: 13.5, stickyScroll: { enabled: false } }}
             />
           </div>
         </div>
 
         <div className="w-80 shrink-0 flex flex-col rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] overflow-hidden">
           <div className="px-3 py-1.5 border-b border-[var(--border)]">
-            <div className="text-xs text-[var(--text-secondary)]">Call Stack</div>
-            <div className="text-[10px] text-[var(--text-secondary)] opacity-70 mt-0.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-sm text-[var(--text-secondary)]">Call Stack</div>
+              <select
+                value={stackFont}
+                onChange={(e) => {
+                  setStackFont(e.target.value);
+                  localStorage.setItem(STACK_FONT_KEY, e.target.value);
+                }}
+                title="Font for the stack frame cards"
+                className="text-xs rounded-[var(--radius-sm)] border border-[var(--border-strong)] bg-[var(--bg-inset)] text-[var(--text-secondary)] px-1 py-0.5 focus:outline-none focus:border-[var(--accent)]"
+              >
+                {STACK_FONT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="text-xs text-[var(--text-secondary)] opacity-70 mt-0.5">
               Rules currently being checked, deepest on top
             </div>
-            <div className="flex items-center gap-3 mt-1.5 text-[10px]">
+            <div className="flex items-center gap-3 mt-1.5 text-xs">
               <span className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-[var(--border-strong)] inline-block" />
                 checking
@@ -368,14 +387,14 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
             </div>
             {dynamicScope.length > 1 && (
               <div className="mt-2 pt-2 border-t border-[var(--border)]">
-                <div className="text-[10px] text-[var(--text-secondary)] opacity-70">
+                <div className="text-xs text-[var(--text-secondary)] opacity-70">
                   Dynamic scope
                 </div>
                 <div className="flex flex-col gap-0.5 mt-1">
                   {dynamicScope.map((resource, i) => (
                     <span
                       key={i}
-                      className="text-[10px] font-mono truncate text-[var(--accent)]"
+                      className="text-xs truncate text-[var(--accent)]"
                     >
                       {resource || "(this schema)"}
                     </span>
@@ -385,7 +404,7 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
             )}
           </div>
           {traceResult ? (
-            <StackVisualizer frames={openFrames} />
+            <StackVisualizer frames={openFrames} fontFamily={stackFont} />
           ) : (
             <div className="flex-1 flex items-center justify-center p-4 text-center text-xs text-[var(--text-secondary)]">
               Click "Compile & Trace" to run the real Blaze evaluator on your pasted schema and instance.
@@ -393,12 +412,10 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
           )}
         </div>
 
-        {traceResult && (
-          <AnnotationsPanel
-            annotations={collectedAnnotations}
-            currentInstanceLocation={currentStep?.instanceLocation}
-          />
-        )}
+        <AnnotationsPanel
+          annotations={collectedAnnotations}
+          currentInstanceLocation={currentStep?.instanceLocation}
+        />
       </div>
 
       {traceResult && (

@@ -9,7 +9,13 @@ const statusStyle: Record<OpenFrame["status"], string> = {
 const annotationStyle =
   "border-[var(--info)] bg-[var(--info-soft)] text-[var(--info)]";
 
-const StackVisualizer = ({ frames }: { frames: OpenFrame[] }) => (
+const StackVisualizer = ({
+  frames,
+  fontFamily,
+}: {
+  frames: OpenFrame[];
+  fontFamily?: string;
+}) => (
   <div
     className="relative flex-1 min-h-0 flex flex-col-reverse items-center justify-start gap-0 py-8 overflow-hidden"
     style={{ perspective: "900px" }}
@@ -25,24 +31,25 @@ const StackVisualizer = ({ frames }: { frames: OpenFrame[] }) => (
       return (
       <div
         key={frame.pushIndex}
-        className={`w-[min(90%,26rem)] shrink-0 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-mono shadow-[var(--shadow-md)] transition-all duration-300 ease-out ${hasAnnotation ? annotationStyle : statusStyle[frame.status]}`}
+        className={`w-[min(92%,28rem)] shrink-0 rounded-[var(--radius-sm)] border px-4 py-3 text-sm shadow-[var(--shadow-md)] transition-all duration-300 ease-out ${hasAnnotation ? annotationStyle : statusStyle[frame.status]}`}
         style={{
+          fontFamily,
           transform: `translateZ(${-distanceFromTop * 34}px) translateY(${-distanceFromTop * 10}px) scale(${Math.max(1 - distanceFromTop * 0.035, 0.7)})`,
           opacity: Math.max(1 - distanceFromTop * 0.08, 0.35),
-          marginTop: depth === 0 ? 0 : -28,
+          marginTop: depth === 0 ? 0 : -30,
           zIndex: depth + 1,
         }}
       >
         <div className="flex items-center justify-between gap-2">
-          <span className="uppercase text-[10px] tracking-wide opacity-70">
+          <span className="uppercase text-xs tracking-wide opacity-70">
             {hasAnnotation ? "annotation" : frame.status}
           </span>
-          <span className="text-[10px] opacity-50">#{frame.pushIndex + 1}</span>
+          <span className="text-xs opacity-50">#{frame.pushIndex + 1}</span>
         </div>
-        <div className="truncate font-semibold">{frame.name}</div>
+        <div className="truncate font-semibold text-base mt-0.5">{frame.name}</div>
         <div className="truncate opacity-70">{frame.evaluatePath}</div>
         {hasAnnotation && (
-          <div className="truncate mt-0.5 text-[10px] opacity-90">
+          <div className="truncate mt-1 text-xs opacity-90">
             → {JSON.stringify(frame.annotation)}
           </div>
         )}
