@@ -5,7 +5,7 @@ import { traceCustomSchema } from "../../api/one";
 import { defineMonacoTheme, ONE_UI_EDITOR_FONT_OPTIONS, ONE_UI_MONACO_THEME } from "../../utils/monacoTheme";
 import { getCollectedAnnotations, getDynamicScope, getOpenFrames } from "../../utils/traceStack";
 import { computeJsonPositions } from "../../utils/jsonPointerPositions";
-import type { TraceResult } from "../../types/one";
+import type { SchemaPositions, TraceResult } from "../../types/one";
 import StackVisualizer from "../TraceDebugger/StackVisualizer";
 import AnnotationsPanel from "../AnnotationsPanel";
 import { STACK_FONT_KEY, STACK_FONT_OPTIONS, getStoredStackFont } from "../../utils/stackFont";
@@ -66,11 +66,38 @@ const highlightClass = (type: "push" | "pass" | "fail") =>
 
 // keywordLocation is "#/json/pointer" for a keyword within the schema we
 // posted (including one reached through a same-document $ref — the server
-// resolves those to their real location), or an absolute URI into a
-// different document for a $ref into another registry schema, which this
-// debugger has no text for and so can't highlight.
-const localKeywordPointer = (keywordLocation: string): string | null =>
-  keywordLocation.startsWith("#") ? keywordLocation.slice(1) : null;
+// resolves those to their real location), or "<resource>#/json/pointer" for
+// a $ref into another registry schema. resource is null for the former.
+const splitKeywordLocation = (
+  keywordLocation: string
+): { resource: string | null; pointer: string } => {
+  if (keywordLocation.startsWith("#")) {
+    return { resource: null, pointer: keywordLocation.slice(1) };
+  }
+  const hashIndex = keywordLocation.indexOf("#");
+  if (hashIndex === -1) return { resource: keywordLocation, pointer: "" };
+  return {
+    resource: keywordLocation.slice(0, hashIndex),
+    pointer: keywordLocation.slice(hashIndex + 1) || "",
+  };
+};
+
+// A resource URL's own $id doubles as a fetchable document URL on Sourcemeta
+// One — no ".json" suffix needed, unlike registryUrl-relative schema paths.
+type RefSchemaState =
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | { status: "ready"; text: string; positions: SchemaPositions };
+
+const shortResourceLabel = (resource: string): string => {
+  try {
+    const url = new URL(resource);
+    const segments = url.pathname.split("/").filter(Boolean);
+    return segments.slice(-2).join("/") || url.hostname;
+  } catch {
+    return resource;
+  }
+};
 
 const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
   const [apiUrl, setApiUrl] = useState(
@@ -86,6 +113,26 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
   const [stepIndex, setStepIndex] = useState(0);
   const [stackFont, setStackFont] = useState(getStoredStackFont);
   const [isPlaying, setIsPlaying] = useState(false);
+
+  // "local" is the pasted schema; any other key is a resource URL fetched
+  // on demand when a step's keywordLocation points into it, so a $ref into
+  // another registry schema can be viewed and highlighted like the local one.
+  const [activeSchemaTab, setActiveSchemaTab] = useState<string>("local");
+  const [refSchemas, setRefSchemas] = useState<Record<string, RefSchemaState>>({});
+
+  // If the pasted schema declares its own top-level $id, every keywordLocation
+  // in it — even for keywords reached via a same-document $ref — carries that
+  // $id as its resource instead of a bare "#...". Without this, such a schema
+  // would look like an external ref to itself and get (uselessly) fetched.
+  const localSchemaId = useMemo(() => {
+    try {
+      const parsed: unknown = JSON.parse(schemaText);
+      const id = (parsed as { $id?: unknown } | null)?.$id;
+      return typeof id === "string" ? id : null;
+    } catch {
+      return null;
+    }
+  }, [schemaText]);
 
   const instanceEditorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
   const instanceDecorationsRef = useRef<MonacoEditor.IEditorDecorationsCollection | null>(null);
@@ -179,23 +226,77 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
     editorInstance.revealRangeInCenterIfOutsideViewport(range);
   }, [currentStep, instancePositions]);
 
+  // Follows the current step across schema documents: switches to the ref's
+  // tab and fetches its text (once per resource) so it can be viewed and
+  // highlighted the same way as the locally pasted schema.
+  useEffect(() => {
+    if (!currentStep) return;
+    const { resource: rawResource } = splitKeywordLocation(currentStep.keywordLocation);
+    const resource = rawResource === localSchemaId ? null : rawResource;
+    setActiveSchemaTab(resource ?? "local");
+    if (resource === null || refSchemas[resource]) return;
+
+    setRefSchemas((prev) => ({ ...prev, [resource]: { status: "loading" } }));
+    fetch(resource)
+      .then((res) => {
+        if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
+        return res.json();
+      })
+      .then((schema) => {
+        const text = JSON.stringify(schema, null, 2);
+        setRefSchemas((prev) => ({
+          ...prev,
+          [resource]: { status: "ready", text, positions: computeJsonPositions(text) },
+        }));
+      })
+      .catch((err: unknown) => {
+        setRefSchemas((prev) => ({
+          ...prev,
+          [resource]: {
+            status: "error",
+            message: err instanceof Error ? err.message : String(err),
+          },
+        }));
+      });
+    // refSchemas is read, not a dependency, so an already-fetched (or
+    // in-flight) resource isn't re-fetched on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep, localSchemaId]);
+
+  const activeRefSchema = activeSchemaTab !== "local" ? refSchemas[activeSchemaTab] : null;
+  const activeSchemaPositions = useMemo(
+    () =>
+      activeSchemaTab === "local"
+        ? schemaPositions
+        : activeRefSchema?.status === "ready"
+          ? activeRefSchema.positions
+          : {},
+    [activeSchemaTab, schemaPositions, activeRefSchema]
+  );
+
   const schemaHighlightNote = useMemo(() => {
     if (!currentStep) return null;
-    const pointer = localKeywordPointer(currentStep.keywordLocation);
-    if (pointer === null) {
-      return "This step is inside a $ref to another registry schema, so it can't be highlighted here.";
+    const { resource: rawResource, pointer } = splitKeywordLocation(currentStep.keywordLocation);
+    const resource = rawResource === localSchemaId ? null : rawResource;
+    if (resource !== null) {
+      const state = refSchemas[resource];
+      if (!state || state.status === "loading") return `Fetching ${resource}…`;
+      if (state.status === "error") return `Could not fetch ${resource}: ${state.message}`;
+      return state.positions[pointer]
+        ? null
+        : "Could not locate this keyword in the referenced schema.";
     }
     return schemaPositions[pointer]
       ? null
       : "Could not locate this keyword in the schema text.";
-  }, [currentStep, schemaPositions]);
+  }, [currentStep, schemaPositions, refSchemas, localSchemaId]);
 
   useEffect(() => {
     const editorInstance = schemaEditorRef.current;
     if (!editorInstance || !currentStep) return;
 
-    const pointer = localKeywordPointer(currentStep.keywordLocation);
-    const position = pointer !== null ? schemaPositions[pointer] : undefined;
+    const { pointer } = splitKeywordLocation(currentStep.keywordLocation);
+    const position = activeSchemaPositions[pointer];
     schemaDecorationsRef.current?.clear();
 
     if (!position) return;
@@ -212,7 +313,7 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
       },
     ]);
     editorInstance.revealRangeInCenterIfOutsideViewport(range);
-  }, [currentStep, schemaPositions]);
+  }, [currentStep, activeSchemaPositions]);
 
   const beforeMount = (monaco: Monaco) => defineMonacoTheme(monaco);
 
@@ -294,31 +395,85 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
 
       <div className="flex flex-1 min-h-0 gap-3 p-3">
         <div className="flex-1 min-w-0 flex flex-col rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] overflow-hidden">
-          <div className="px-3 py-1.5 text-xs text-[var(--text-secondary)] border-b border-[var(--border)] flex items-center justify-between gap-2">
-            <span className="truncate">
+          <div className="flex items-center border-b border-[var(--border)] overflow-x-auto shrink-0">
+            <button
+              onClick={() => setActiveSchemaTab("local")}
+              className={`px-3 py-1.5 text-xs shrink-0 border-r border-[var(--border)] ${
+                activeSchemaTab === "local"
+                  ? "text-[var(--text)] bg-[var(--bg-inset)]"
+                  : "text-[var(--text-secondary)] hover:text-[var(--text)]"
+              }`}
+            >
               Schema (editable)
+            </button>
+            {Object.keys(refSchemas).map((resource) => (
+              <div
+                key={resource}
+                title={resource}
+                className={`flex items-center shrink-0 border-r border-[var(--border)] ${
+                  activeSchemaTab === resource
+                    ? "text-[var(--text)] bg-[var(--bg-inset)]"
+                    : "text-[var(--text-secondary)]"
+                }`}
+              >
+                <button
+                  onClick={() => setActiveSchemaTab(resource)}
+                  className="pl-3 pr-1.5 py-1.5 text-xs truncate max-w-32 hover:text-[var(--text)]"
+                >
+                  {shortResourceLabel(resource)}
+                  {refSchemas[resource].status === "loading" && " …"}
+                  {refSchemas[resource].status === "error" && " ⚠"}
+                </button>
+                <button
+                  onClick={() => {
+                    setRefSchemas((prev) => {
+                      const next = { ...prev };
+                      delete next[resource];
+                      return next;
+                    });
+                    if (activeSchemaTab === resource) setActiveSchemaTab("local");
+                  }}
+                  title={`Close ${resource}`}
+                  className="pr-2 pl-0.5 py-1.5 text-xs opacity-60 hover:opacity-100 hover:text-[var(--danger)]"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            <span className="ml-auto px-2 flex items-center gap-2 min-w-0">
               {currentStep && (
-                <span className="ml-2 text-[var(--accent)] font-mono">
+                <span className="text-xs text-[var(--accent)] font-mono truncate">
                   {currentStep.keywordLocation || "#"}
                 </span>
               )}
+              {schemaHighlightNote && (
+                <span className="text-[10px] text-[var(--accent)] truncate shrink-0">
+                  {schemaHighlightNote}
+                </span>
+              )}
             </span>
-            {schemaHighlightNote && (
-              <span className="text-[10px] text-[var(--accent)] truncate">
-                {schemaHighlightNote}
-              </span>
-            )}
           </div>
           <div className="flex-1 min-h-0">
-            <Editor
-              language="json"
-              theme={ONE_UI_MONACO_THEME}
-              beforeMount={beforeMount}
-              value={schemaText}
-              onChange={(value) => setSchemaText(value ?? "")}
-              onMount={(editorInstance) => (schemaEditorRef.current = editorInstance)}
-              options={{ ...ONE_UI_EDITOR_FONT_OPTIONS, minimap: { enabled: false }, fontSize: 13.5, stickyScroll: { enabled: false } }}
-            />
+            {activeSchemaTab === "local" ? (
+              <Editor
+                language="json"
+                theme={ONE_UI_MONACO_THEME}
+                beforeMount={beforeMount}
+                value={schemaText}
+                onChange={(value) => setSchemaText(value ?? "")}
+                onMount={(editorInstance) => (schemaEditorRef.current = editorInstance)}
+                options={{ ...ONE_UI_EDITOR_FONT_OPTIONS, minimap: { enabled: false }, fontSize: 13.5, stickyScroll: { enabled: false } }}
+              />
+            ) : (
+              <Editor
+                language="json"
+                theme={ONE_UI_MONACO_THEME}
+                beforeMount={beforeMount}
+                value={activeRefSchema?.status === "ready" ? activeRefSchema.text : ""}
+                onMount={(editorInstance) => (schemaEditorRef.current = editorInstance)}
+                options={{ ...ONE_UI_EDITOR_FONT_OPTIONS, readOnly: true, minimap: { enabled: false }, fontSize: 13.5, stickyScroll: { enabled: false } }}
+              />
+            )}
           </div>
         </div>
 
