@@ -2,7 +2,6 @@ import { useContext, useState } from "react";
 import { AppContext } from "../contexts/AppContext";
 import { listDirectory } from "../api/one";
 import type { DirectoryEntry } from "../types/one";
-import HealthBadge from "./HealthBadge";
 
 const DirectoryNode = ({
   entry,
@@ -33,7 +32,6 @@ const DirectoryNode = ({
         title={entry.path}
       >
         <span className="truncate">📄 {entry.name}</span>
-        <HealthBadge health={entry.health} />
       </button>
     );
   }
@@ -70,7 +68,6 @@ const DirectoryNode = ({
           <span className="text-[var(--text-secondary)] text-xs">
             {entry.schemas}
           </span>
-          <HealthBadge health={entry.health} />
         </span>
       </button>
       {expanded && loading && (
