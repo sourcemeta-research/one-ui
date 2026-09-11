@@ -454,26 +454,32 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
             </span>
           </div>
           <div className="flex-1 min-h-0">
-            {activeSchemaTab === "local" ? (
-              <Editor
-                language="json"
-                theme={ONE_UI_MONACO_THEME}
-                beforeMount={beforeMount}
-                value={schemaText}
-                onChange={(value) => setSchemaText(value ?? "")}
-                onMount={(editorInstance) => (schemaEditorRef.current = editorInstance)}
-                options={{ ...ONE_UI_EDITOR_FONT_OPTIONS, minimap: { enabled: false }, fontSize: 13.5, stickyScroll: { enabled: false } }}
-              />
-            ) : (
-              <Editor
-                language="json"
-                theme={ONE_UI_MONACO_THEME}
-                beforeMount={beforeMount}
-                value={activeRefSchema?.status === "ready" ? activeRefSchema.text : ""}
-                onMount={(editorInstance) => (schemaEditorRef.current = editorInstance)}
-                options={{ ...ONE_UI_EDITOR_FONT_OPTIONS, readOnly: true, minimap: { enabled: false }, fontSize: 13.5, stickyScroll: { enabled: false } }}
-              />
-            )}
+            <Editor
+              key={activeSchemaTab === "local" ? "local" : "ref"}
+              language="json"
+              theme={ONE_UI_MONACO_THEME}
+              beforeMount={beforeMount}
+              value={
+                activeSchemaTab === "local"
+                  ? schemaText
+                  : activeRefSchema?.status === "ready"
+                    ? activeRefSchema.text
+                    : ""
+              }
+              onChange={
+                activeSchemaTab === "local"
+                  ? (value) => setSchemaText(value ?? "")
+                  : undefined
+              }
+              onMount={(editorInstance) => (schemaEditorRef.current = editorInstance)}
+              options={{
+                ...ONE_UI_EDITOR_FONT_OPTIONS,
+                readOnly: activeSchemaTab !== "local",
+                minimap: { enabled: false },
+                fontSize: 13.5,
+                stickyScroll: { enabled: false },
+              }}
+            />
           </div>
         </div>
 
