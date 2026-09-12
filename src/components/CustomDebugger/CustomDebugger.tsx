@@ -8,7 +8,6 @@ import { computeJsonPositions } from "../../utils/jsonPointerPositions";
 import type { SchemaPositions, TraceResult } from "../../types/one";
 import StackVisualizer from "../TraceDebugger/StackVisualizer";
 import AnnotationsPanel from "../AnnotationsPanel";
-import { STACK_FONT_KEY, STACK_FONT_OPTIONS, getStoredStackFont } from "../../utils/stackFont";
 
 const PLAY_INTERVAL_MS = 700;
 const API_URL_KEY = "one-ui.customDebuggerApiUrl";
@@ -111,7 +110,6 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
   const [error, setError] = useState<string | null>(null);
 
   const [stepIndex, setStepIndex] = useState(0);
-  const [stackFont, setStackFont] = useState(getStoredStackFont);
   const [isPlaying, setIsPlaying] = useState(false);
 
   // "local" is the pasted schema; any other key is a resource URL fetched
@@ -507,24 +505,7 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
 
         <div className="w-80 shrink-0 flex flex-col rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] overflow-hidden">
           <div className="px-3 py-1.5 border-b border-[var(--border)]">
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-sm text-[var(--text-secondary)]">Call Stack</div>
-              <select
-                value={stackFont}
-                onChange={(e) => {
-                  setStackFont(e.target.value);
-                  localStorage.setItem(STACK_FONT_KEY, e.target.value);
-                }}
-                title="Font for the stack frame cards"
-                className="text-xs rounded-[var(--radius-sm)] border border-[var(--border-strong)] bg-[var(--bg-inset)] text-[var(--text-secondary)] px-1 py-0.5 focus:outline-none focus:border-[var(--accent)]"
-              >
-                {STACK_FONT_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <div className="text-sm text-[var(--text-secondary)]">Call Stack</div>
             <div className="text-xs text-[var(--text-secondary)] opacity-70 mt-0.5">
               Rules currently being checked, deepest on top
             </div>
@@ -565,7 +546,7 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
             )}
           </div>
           {traceResult ? (
-            <StackVisualizer frames={openFrames} fontFamily={stackFont} />
+            <StackVisualizer frames={openFrames} />
           ) : (
             <div className="flex-1 flex items-center justify-center p-4 text-center text-xs text-[var(--text-secondary)]">
               Click "Compile & Trace" to run the real Blaze evaluator on your pasted schema and instance.

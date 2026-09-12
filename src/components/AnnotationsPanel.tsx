@@ -43,10 +43,13 @@ const AnnotationsPanel = ({
                 : "border-[var(--border)] bg-[var(--bg-inset)] opacity-60"
             }`}
           >
-            <div className="truncate text-[var(--info)]">
+            <div className="break-words text-[var(--info)]">
               {formatAnnotationList(entry.values)}
             </div>
-            <div className="text-xs text-[var(--text-secondary)] truncate">
+            <div
+              className="text-xs text-[var(--text-secondary)] truncate"
+              title={`at ${entry.keywordLocation || "/"} · instance ${entry.instanceLocation || "/"}`}
+            >
               at {entry.keywordLocation || "/"} · instance {entry.instanceLocation || "/"}
             </div>
           </div>

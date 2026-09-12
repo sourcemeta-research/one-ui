@@ -30,9 +30,13 @@ const SchemaPicker = () => {
 
   useEffect(() => {
     let cancelled = false;
+    setError(null);
     listDirectory(registryUrl)
       .then((listing) => {
-        if (!cancelled) setRootEntries(listing.entries);
+        if (!cancelled) {
+          setRootEntries(listing.entries);
+          setError(null);
+        }
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(describeError(err, registryUrl));
