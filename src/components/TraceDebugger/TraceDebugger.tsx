@@ -8,7 +8,6 @@ import { defineMonacoTheme, ONE_UI_EDITOR_FONT_OPTIONS, ONE_UI_MONACO_THEME } fr
 import { getCollectedAnnotations, getDynamicScope, getOpenFrames } from "../../utils/traceStack";
 import StackVisualizer from "./StackVisualizer";
 import AnnotationsPanel from "../AnnotationsPanel";
-import { STACK_FONT_KEY, STACK_FONT_OPTIONS, getStoredStackFont } from "../../utils/stackFont";
 
 const PLAY_INTERVAL_MS = 700;
 
@@ -21,11 +20,14 @@ const splitKeywordLocation = (keywordLocation: string): { resource: string; poin
   };
 };
 
+// Both the /positions endpoint and trace steps' instancePositions come back
+// already 1-indexed (Monaco's own convention) — unlike the client-computed
+// positions in the Custom Debugger, which are 0-indexed and need the +1.
 const toMonacoRange = (position: [number, number, number, number]) => ({
-  startLineNumber: position[0] + 1,
-  startColumn: position[1] + 1,
-  endLineNumber: position[2] + 1,
-  endColumn: position[3] + 1,
+  startLineNumber: position[0],
+  startColumn: position[1],
+  endLineNumber: position[2],
+  endColumn: position[3],
 });
 
 const TraceDebugger = () => {
@@ -40,7 +42,6 @@ const TraceDebugger = () => {
   } = useContext(AppContext);
 
   const [stepIndex, setStepIndex] = useState(0);
-  const [stackFont, setStackFont] = useState(getStoredStackFont);
   const [isPlaying, setIsPlaying] = useState(false);
   const [schemaPositions, setSchemaPositions] = useState<SchemaPositions | null>(null);
 
@@ -275,25 +276,8 @@ const TraceDebugger = () => {
 
         <div className="w-80 shrink-0 flex flex-col rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] overflow-hidden">
           <div className="px-3 py-1.5 border-b border-[var(--border)]">
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-sm text-[var(--text-secondary)]">
-                Call Stack
-              </div>
-              <select
-                value={stackFont}
-                onChange={(e) => {
-                  setStackFont(e.target.value);
-                  localStorage.setItem(STACK_FONT_KEY, e.target.value);
-                }}
-                title="Font for the stack frame cards"
-                className="text-xs rounded-[var(--radius-sm)] border border-[var(--border-strong)] bg-[var(--bg-inset)] text-[var(--text-secondary)] px-1 py-0.5 focus:outline-none focus:border-[var(--accent)]"
-              >
-                {STACK_FONT_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+            <div className="text-sm text-[var(--text-secondary)]">
+              Call Stack
             </div>
             <div className="text-xs text-[var(--text-secondary)] opacity-70 mt-0.5">
               Rules currently being checked, deepest on top
@@ -334,7 +318,7 @@ const TraceDebugger = () => {
               </div>
             )}
           </div>
-          <StackVisualizer frames={openFrames} fontFamily={stackFont} />
+          <StackVisualizer frames={openFrames} />
         </div>
 
         <AnnotationsPanel

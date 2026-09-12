@@ -67,8 +67,12 @@ export const getSchemaContent = async (
   if (!response.ok) {
     throw new Error(`Request failed with status ${response.status}`);
   }
-  const json = await response.json();
-  return JSON.stringify(json, null, 2);
+  // Return the server's exact original text rather than re-serializing via
+  // JSON.parse/stringify: /schemas/positions is computed against that exact
+  // text, and reformatting (e.g. reflowing inline arrays to multiple lines)
+  // shifts every line number after the first difference, breaking every
+  // trace highlight that follows.
+  return response.text();
 };
 
 export const getSchemaDependencies = (

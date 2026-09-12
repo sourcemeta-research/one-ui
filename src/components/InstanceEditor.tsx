@@ -95,39 +95,29 @@ const InstanceEditor = () => {
       </div>
 
       <div className="h-72 shrink-0 border-b border-[var(--border)]">
-        {activeTab === "schema" ? (
-          schemaContentLoading ? (
-            <p className="text-sm text-[var(--text-secondary)] p-3">
-              Loading schema…
-            </p>
-          ) : schemaContentError ? (
-            <p className="text-sm text-[var(--danger)] p-3">
-              {schemaContentError}
-            </p>
-          ) : (
-            <Editor
-              language="json"
-              theme={ONE_UI_MONACO_THEME}
-              beforeMount={defineMonacoTheme}
-              value={schemaContent ?? ""}
-              options={{
-                ...ONE_UI_EDITOR_FONT_OPTIONS,
-                readOnly: true,
-                minimap: { enabled: false },
-                fontSize: 14,
-                scrollBeyondLastLine: false,
-                stickyScroll: { enabled: false },
-              }}
-            />
-          )
+        {activeTab === "schema" && schemaContentLoading ? (
+          <p className="text-sm text-[var(--text-secondary)] p-3">
+            Loading schema…
+          </p>
+        ) : activeTab === "schema" && schemaContentError ? (
+          <p className="text-sm text-[var(--danger)] p-3">
+            {schemaContentError}
+          </p>
         ) : (
           <Editor
+            key={activeTab}
             language="json"
-            theme="one-ui-dark"
-            value={instanceText}
-            onChange={(value) => setInstanceText(value ?? "")}
+            theme={ONE_UI_MONACO_THEME}
+            beforeMount={defineMonacoTheme}
+            value={activeTab === "schema" ? schemaContent ?? "" : instanceText}
+            onChange={
+              activeTab === "instance"
+                ? (value) => setInstanceText(value ?? "")
+                : undefined
+            }
             options={{
               ...ONE_UI_EDITOR_FONT_OPTIONS,
+              readOnly: activeTab === "schema",
               minimap: { enabled: false },
               fontSize: 14,
               scrollBeyondLastLine: false,
