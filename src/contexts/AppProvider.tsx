@@ -23,7 +23,9 @@ import type {
 } from "../types/one";
 
 const SESSION_REGISTRY_KEY = "one-ui.registryUrl";
-const DEFAULT_REGISTRY_URL = "http://localhost:8000";
+// Sourcemeta's own public instance — works out of the box with zero setup,
+// instead of pointing at a localhost registry that likely isn't running.
+const DEFAULT_REGISTRY_URL = "https://schemas.sourcemeta.com";
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [registryUrl, setRegistryUrlState] = useState(
