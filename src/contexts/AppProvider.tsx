@@ -6,19 +6,25 @@ import {
   type ResultMode,
 } from "./AppContext";
 import {
+  checkRegistryHealth,
   evaluateSchema,
   getSchemaContent,
   getSchemaDependencies,
   getSchemaDependents,
   getSchemaHealthReport,
+  getSchemaLocations,
   getSchemaMetadata,
+  getSchemaStats,
+  promoteToRdf,
   traceSchema,
 } from "../api/one";
 import type {
   DependencyEdge,
   EvaluationResult,
   HealthReport,
+  SchemaLocations,
   SchemaMetadata,
+  SchemaStats,
   TraceResult,
 } from "../types/one";
 
@@ -36,6 +42,19 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     sessionStorage.setItem(SESSION_REGISTRY_KEY, url);
     setRegistryUrlState(url);
   }, []);
+
+  const [registryHealthy, setRegistryHealthy] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setRegistryHealthy(null);
+    checkRegistryHealth(registryUrl).then((healthy) => {
+      if (!cancelled) setRegistryHealthy(healthy);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [registryUrl]);
 
   const [selectedSchemaPath, setSelectedSchemaPath] = useState<string | null>(
     null
@@ -62,12 +81,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   );
   const [dependents, setDependents] = useState<DependencyEdge[] | null>(null);
   const [healthReport, setHealthReport] = useState<HealthReport | null>(null);
+  const [schemaStats, setSchemaStats] = useState<SchemaStats | null>(null);
+  const [schemaLocations, setSchemaLocations] =
+    useState<SchemaLocations | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
   const [resultMode, setResultMode] = useState<ResultMode | null>(null);
   const [evaluationResult, setEvaluationResult] =
     useState<EvaluationResult | null>(null);
   const [traceResult, setTraceResult] = useState<TraceResult | null>(null);
+  const [rdfResult, setRdfResult] = useState<unknown>(null);
   const [resultLoading, setResultLoading] = useState(false);
   const [resultError, setResultError] = useState<string | null>(null);
 
@@ -87,6 +110,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     setMetadataError(null);
     setEvaluationResult(null);
     setTraceResult(null);
+    setRdfResult(null);
     setResultMode(null);
     setActiveTab("schema");
 
@@ -133,22 +157,30 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     setDependencies(null);
     setDependents(null);
     setHealthReport(null);
+    setSchemaStats(null);
+    setSchemaLocations(null);
     Promise.all([
       getSchemaDependencies(registryUrl, selectedSchemaPath),
       getSchemaDependents(registryUrl, selectedSchemaPath),
       getSchemaHealthReport(registryUrl, selectedSchemaPath),
+      getSchemaStats(registryUrl, selectedSchemaPath),
+      getSchemaLocations(registryUrl, selectedSchemaPath),
     ])
-      .then(([deps, dependentsList, health]) => {
+      .then(([deps, dependentsList, health, stats, locations]) => {
         if (cancelled) return;
         setDependencies(deps);
         setDependents(dependentsList);
         setHealthReport(health);
+        setSchemaStats(stats);
+        setSchemaLocations(locations);
       })
       .catch(() => {
         if (!cancelled) {
           setDependencies([]);
           setDependents([]);
           setHealthReport(null);
+          setSchemaStats(null);
+          setSchemaLocations(null);
         }
       })
       .finally(() => {
@@ -186,9 +218,31 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       .finally(() => setResultLoading(false));
   }, [registryUrl, selectedSchemaPath, instanceText]);
 
+  const runRdf = useCallback(() => {
+    if (!selectedSchemaPath) return;
+    setResultLoading(true);
+    setResultError(null);
+    setResultMode("rdf");
+    let instance: unknown;
+    try {
+      instance = JSON.parse(instanceText);
+    } catch (parseError) {
+      setResultError(`Invalid instance JSON: ${(parseError as Error).message}`);
+      setResultLoading(false);
+      return;
+    }
+    promoteToRdf(registryUrl, selectedSchemaPath, instance)
+      .then(setRdfResult)
+      .catch((error: unknown) =>
+        setResultError(error instanceof Error ? error.message : String(error))
+      )
+      .finally(() => setResultLoading(false));
+  }, [registryUrl, selectedSchemaPath, instanceText]);
+
   const value = {
     registryUrl,
     setRegistryUrl,
+    registryHealthy,
     selectedSchemaPath,
     setSelectedSchemaPath,
     schemaMetadata,
@@ -206,14 +260,18 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     dependencies,
     dependents,
     healthReport,
+    schemaStats,
+    schemaLocations,
     detailLoading,
     resultMode,
     evaluationResult,
     traceResult,
+    rdfResult,
     resultLoading,
     resultError,
     runEvaluate,
     runTrace,
+    runRdf,
     debuggerOpen,
     openDebugger,
     closeDebugger,

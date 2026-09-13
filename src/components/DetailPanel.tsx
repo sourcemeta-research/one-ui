@@ -36,12 +36,33 @@ const TabButton = ({
 };
 
 const DetailPanel = () => {
-  const { detailTab, dependencies, dependents, healthReport, detailLoading } =
-    useContext(AppContext);
+  const {
+    detailTab,
+    dependencies,
+    dependents,
+    healthReport,
+    schemaStats,
+    schemaLocations,
+    detailLoading,
+  } = useContext(AppContext);
+
+  const statsRows = Object.entries(schemaStats ?? {}).flatMap(
+    ([vocabulary, keywords]) =>
+      Object.entries(keywords).map(([keyword, count]) => ({
+        vocabulary,
+        keyword,
+        count,
+      }))
+  );
+  statsRows.sort((a, b) => b.count - a.count);
+  const maxCount = Math.max(1, ...statsRows.map((row) => row.count));
+
+  const staticLocations = Object.entries(schemaLocations?.static ?? {});
+  const dynamicLocations = Object.entries(schemaLocations?.dynamic ?? {});
 
   return (
     <div className="flex flex-col">
-      <div className="flex border-b border-[var(--border)]">
+      <div className="flex border-b border-[var(--border)] overflow-x-auto">
         <TabButton
           tab="dependencies"
           label="Dependencies"
@@ -56,6 +77,12 @@ const DetailPanel = () => {
           tab="lint"
           label="Lint"
           count={healthReport?.errors.length ?? 0}
+        />
+        <TabButton tab="stats" label="Stats" count={statsRows.length} />
+        <TabButton
+          tab="locations"
+          label="Locations"
+          count={staticLocations.length + dynamicLocations.length}
         />
       </div>
 
@@ -151,6 +178,105 @@ const DetailPanel = () => {
                 )}
               </div>
             ))}
+          </div>
+        )}
+
+        {!detailLoading && detailTab === "stats" && (
+          <div className="flex flex-col gap-1.5">
+            {statsRows.length === 0 && (
+              <p className="text-xs text-[var(--text-secondary)] opacity-60">
+                No keyword usage recorded
+              </p>
+            )}
+            {statsRows.map((row, i) => (
+              <div key={i} className="text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-[var(--text-nav)] truncate">
+                    {row.keyword}
+                  </span>
+                  <span className="text-[var(--text-secondary)] shrink-0">
+                    {row.count}
+                  </span>
+                </div>
+                <div className="h-1 mt-0.5 rounded-full bg-[var(--bg-inset)] overflow-hidden">
+                  <div
+                    className="h-full bg-[var(--info)]"
+                    style={{ width: `${(row.count / maxCount) * 100}%` }}
+                  />
+                </div>
+                <div
+                  className="text-[10px] text-[var(--text-secondary)] opacity-60 truncate mt-0.5"
+                  title={row.vocabulary}
+                >
+                  {row.vocabulary}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!detailLoading && detailTab === "locations" && (
+          <div className="flex flex-col gap-3">
+            {staticLocations.length === 0 && dynamicLocations.length === 0 && (
+              <p className="text-xs text-[var(--text-secondary)] opacity-60">
+                No locations found
+              </p>
+            )}
+            {staticLocations.length > 0 && (
+              <div>
+                <div className="text-xs text-[var(--text-secondary)] opacity-70 mb-1">
+                  Static ({staticLocations.length})
+                </div>
+                <div className="flex flex-col gap-1">
+                  {staticLocations.map(([uri, entry]) => (
+                    <div
+                      key={uri}
+                      className="text-xs border border-[var(--border)] rounded-[var(--radius-sm)] px-2 py-1 bg-[var(--bg-inset)]/50"
+                      title={uri}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-[var(--text-nav)] truncate">
+                          {entry.pointer || "/"}
+                        </span>
+                        <span className="text-[var(--text-secondary)] shrink-0">
+                          {entry.type}
+                        </span>
+                      </div>
+                      {entry.orphan && (
+                        <div className="text-[10px] text-[var(--warning)] mt-0.5">
+                          orphan (never referenced)
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {dynamicLocations.length > 0 && (
+              <div>
+                <div className="text-xs text-[var(--text-secondary)] opacity-70 mb-1">
+                  Dynamic ({dynamicLocations.length})
+                </div>
+                <div className="flex flex-col gap-1">
+                  {dynamicLocations.map(([uri, entry]) => (
+                    <div
+                      key={uri}
+                      className="text-xs border border-[var(--border)] rounded-[var(--radius-sm)] px-2 py-1 bg-[var(--bg-inset)]/50"
+                      title={uri}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-[var(--text-nav)] truncate">
+                          {entry.pointer || "/"}
+                        </span>
+                        <span className="text-[var(--text-secondary)] shrink-0">
+                          {entry.type}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
