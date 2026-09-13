@@ -3,7 +3,7 @@ import { AppContext } from "../contexts/AppContext";
 import Logo from "./Logo";
 
 const RegistryBar = ({ onOpenCustomDebugger }: { onOpenCustomDebugger: () => void }) => {
-  const { registryUrl, setRegistryUrl } = useContext(AppContext);
+  const { registryUrl, setRegistryUrl, registryHealthy } = useContext(AppContext);
   const [draft, setDraft] = useState(registryUrl);
 
   const apply = (e: React.FormEvent) => {
@@ -20,6 +20,22 @@ const RegistryBar = ({ onOpenCustomDebugger }: { onOpenCustomDebugger: () => voi
       <span className="text-sm text-[var(--text-secondary)] whitespace-nowrap">
         Registry
       </span>
+      <span
+        title={
+          registryHealthy === null
+            ? "Checking registry health…"
+            : registryHealthy
+              ? "Registry is reachable"
+              : "Registry health check failed"
+        }
+        className={`w-2 h-2 rounded-full shrink-0 ${
+          registryHealthy === null
+            ? "bg-[var(--border-strong)] animate-pulse"
+            : registryHealthy
+              ? "bg-[var(--success)]"
+              : "bg-[var(--danger)]"
+        }`}
+      />
       <input
         value={draft}
         onChange={(e) => setDraft(e.target.value)}

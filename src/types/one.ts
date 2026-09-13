@@ -119,6 +119,28 @@ export type HealthReport = {
 
 export type SchemaPositions = Record<string, [number, number, number, number]>;
 
+// Keyword occurrence counts, grouped by vocabulary URI then keyword name.
+export type SchemaStats = Record<string, Record<string, number>>;
+
+export type SchemaLocationEntry = {
+  parent: string | null;
+  type: string;
+  root: string;
+  base: string;
+  pointer: string;
+  relativePointer: string;
+  position: [number, number, number, number];
+  dialect: string;
+  baseDialect: string;
+  propertyName: boolean;
+  orphan: boolean;
+};
+
+export type SchemaLocations = {
+  static: Record<string, SchemaLocationEntry>;
+  dynamic: Record<string, SchemaLocationEntry>;
+};
+
 export type ProblemDetails = {
   type: string;
   title: string;

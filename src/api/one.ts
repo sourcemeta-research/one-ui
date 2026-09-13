@@ -4,8 +4,10 @@ import type {
   EvaluationResult,
   HealthReport,
   ProblemDetails,
+  SchemaLocations,
   SchemaMetadata,
   SchemaPositions,
+  SchemaStats,
   SearchResult,
   TraceResult,
 } from "../types/one";
@@ -38,6 +40,19 @@ const request = async <T>(
   return response.json() as Promise<T>;
 };
 
+// GET /self/v1/health has an empty body and only exists to be pinged, so it
+// resolves to a bool rather than parsing a response.
+export const checkRegistryHealth = async (
+  registryUrl: string
+): Promise<boolean> => {
+  try {
+    const response = await fetch(`${normaliseBase(registryUrl)}/self/v1/health`);
+    return response.ok;
+  } catch {
+    return false;
+  }
+};
+
 export const listDirectory = (
   registryUrl: string,
   path = ""
@@ -61,17 +76,21 @@ export const getSchemaMetadata = (
 
 export const getSchemaContent = async (
   registryUrl: string,
-  schemaPath: string
+  schemaPath: string,
+  options?: { bundle?: boolean }
 ): Promise<string> => {
-  const response = await fetch(`${normaliseBase(registryUrl)}${schemaPath}.json`);
+  const query = options?.bundle ? "?bundle=1" : "";
+  const response = await fetch(
+    `${normaliseBase(registryUrl)}${schemaPath}.json${query}`
+  );
   if (!response.ok) {
     throw new Error(`Request failed with status ${response.status}`);
   }
   // Return the server's exact original text rather than re-serializing via
   // JSON.parse/stringify: /schemas/positions is computed against that exact
-  // text, and reformatting (e.g. reflowing inline arrays to multiple lines)
-  // shifts every line number after the first difference, breaking every
-  // trace highlight that follows.
+  // text (for the unbundled case), and reformatting (e.g. reflowing inline
+  // arrays to multiple lines) shifts every line number after the first
+  // difference, breaking every trace highlight that follows.
   return response.text();
 };
 
@@ -109,6 +128,36 @@ export const getSchemaPositions = (
   schemaPath: string
 ): Promise<SchemaPositions> =>
   request(registryUrl, `/self/v1/api/schemas/positions${schemaPath}`);
+
+export const getSchemaStats = (
+  registryUrl: string,
+  schemaPath: string
+): Promise<SchemaStats> =>
+  request(registryUrl, `/self/v1/api/schemas/stats${schemaPath}`);
+
+export const getSchemaLocations = (
+  registryUrl: string,
+  schemaPath: string
+): Promise<SchemaLocations> =>
+  request(registryUrl, `/self/v1/api/schemas/locations${schemaPath}`);
+
+// Unlike evaluate/trace, the request body wraps the instance in an object
+// alongside optional JSON-LD flattening/compaction options.
+export const promoteToRdf = (
+  registryUrl: string,
+  schemaPath: string,
+  instance: unknown,
+  options?: { flatten?: boolean; context?: object }
+): Promise<unknown> =>
+  request(registryUrl, `/self/v1/api/schemas/rdf${schemaPath}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      instance,
+      flatten: options?.flatten,
+      context: options?.context,
+    }),
+  });
 
 export const traceSchema = (
   registryUrl: string,

@@ -1,13 +1,15 @@
-import { useContext } from "react";
+import { useContext, useEffect, useState } from "react";
 import Editor from "@monaco-editor/react";
 import { AppContext } from "../contexts/AppContext";
 import MetadataTable from "./MetadataTable";
 import DetailPanel from "./DetailPanel";
 import { defineMonacoTheme, ONE_UI_EDITOR_FONT_OPTIONS, ONE_UI_MONACO_THEME } from "../utils/monacoTheme";
 import IdleState from "./IdleState";
+import { getSchemaContent } from "../api/one";
 
 const InstanceEditor = () => {
   const {
+    registryUrl,
     selectedSchemaPath,
     schemaMetadata,
     metadataLoading,
@@ -21,8 +23,46 @@ const InstanceEditor = () => {
     setInstanceText,
     runEvaluate,
     runTrace,
+    runRdf,
     resultLoading,
   } = useContext(AppContext);
+
+  // Bundled view is fetched separately from the plain schemaContent used
+  // elsewhere (e.g. the Trace Debugger's highlighting, which relies on
+  // /positions being computed against the unbundled text) so toggling it
+  // here can't desync anything else that reads schemaContent.
+  const [bundled, setBundled] = useState(false);
+  const [bundledContent, setBundledContent] = useState<string | null>(null);
+  const [bundledLoading, setBundledLoading] = useState(false);
+  const [bundledError, setBundledError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setBundled(false);
+    setBundledContent(null);
+    setBundledError(null);
+  }, [selectedSchemaPath]);
+
+  useEffect(() => {
+    if (!bundled || !selectedSchemaPath) return;
+    let cancelled = false;
+    setBundledLoading(true);
+    setBundledError(null);
+    getSchemaContent(registryUrl, selectedSchemaPath, { bundle: true })
+      .then((content) => {
+        if (!cancelled) setBundledContent(content);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setBundledError(error instanceof Error ? error.message : String(error));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setBundledLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [bundled, registryUrl, selectedSchemaPath]);
 
   if (!selectedSchemaPath) {
     return <IdleState />;
@@ -66,12 +106,19 @@ const InstanceEditor = () => {
           >
             Trace
           </button>
+          <button
+            onClick={runRdf}
+            disabled={resultLoading}
+            className="h-8 px-3 text-sm rounded-[var(--radius-sm)] border border-[var(--info)]/50 bg-[var(--info)]/12 text-[var(--info)] hover:bg-[var(--info)]/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            RDF
+          </button>
         </div>
       </div>
 
       <MetadataTable />
 
-      <div className="flex border-b border-[var(--border)]">
+      <div className="flex items-center border-b border-[var(--border)]">
         <button
           onClick={() => setActiveTab("schema")}
           className={`px-3 py-1.5 text-xs border-r border-[var(--border)] ${
@@ -92,10 +139,30 @@ const InstanceEditor = () => {
         >
           Instance
         </button>
+        {activeTab === "schema" && (
+          <label
+            title="Show the schema with $ref keywords inlined via JSON Schema Bundling"
+            className="ml-auto mr-2 flex items-center gap-1.5 text-xs text-[var(--text-secondary)] cursor-pointer select-none"
+          >
+            <input
+              type="checkbox"
+              checked={bundled}
+              onChange={(e) => setBundled(e.target.checked)}
+              className="accent-[var(--accent)]"
+            />
+            Bundled
+          </label>
+        )}
       </div>
 
       <div className="h-72 shrink-0 border-b border-[var(--border)]">
-        {activeTab === "schema" && schemaContentLoading ? (
+        {activeTab === "schema" && bundled && bundledLoading ? (
+          <p className="text-sm text-[var(--text-secondary)] p-3">
+            Bundling schema…
+          </p>
+        ) : activeTab === "schema" && bundled && bundledError ? (
+          <p className="text-sm text-[var(--danger)] p-3">{bundledError}</p>
+        ) : activeTab === "schema" && schemaContentLoading ? (
           <p className="text-sm text-[var(--text-secondary)] p-3">
             Loading schema…
           </p>
@@ -105,11 +172,17 @@ const InstanceEditor = () => {
           </p>
         ) : (
           <Editor
-            key={activeTab}
+            key={activeTab === "schema" && bundled ? "schema-bundled" : activeTab}
             language="json"
             theme={ONE_UI_MONACO_THEME}
             beforeMount={defineMonacoTheme}
-            value={activeTab === "schema" ? schemaContent ?? "" : instanceText}
+            value={
+              activeTab === "schema"
+                ? bundled
+                  ? bundledContent ?? ""
+                  : schemaContent ?? ""
+                : instanceText
+            }
             onChange={
               activeTab === "instance"
                 ? (value) => setInstanceText(value ?? "")

@@ -3,17 +3,20 @@ import type {
   DependencyEdge,
   EvaluationResult,
   HealthReport,
+  SchemaLocations,
   SchemaMetadata,
+  SchemaStats,
   TraceResult,
 } from "../types/one";
 
-export type ResultMode = "evaluate" | "trace";
+export type ResultMode = "evaluate" | "trace" | "rdf";
 export type EditorTab = "schema" | "instance";
-export type DetailTab = "dependencies" | "dependents" | "lint";
+export type DetailTab = "dependencies" | "dependents" | "lint" | "stats" | "locations";
 
 type AppContextType = {
   registryUrl: string;
   setRegistryUrl: (url: string) => void;
+  registryHealthy: boolean | null;
 
   selectedSchemaPath: string | null;
   setSelectedSchemaPath: (path: string | null) => void;
@@ -37,16 +40,20 @@ type AppContextType = {
   dependencies: DependencyEdge[] | null;
   dependents: DependencyEdge[] | null;
   healthReport: HealthReport | null;
+  schemaStats: SchemaStats | null;
+  schemaLocations: SchemaLocations | null;
   detailLoading: boolean;
 
   resultMode: ResultMode | null;
   evaluationResult: EvaluationResult | null;
   traceResult: TraceResult | null;
+  rdfResult: unknown;
   resultLoading: boolean;
   resultError: string | null;
 
   runEvaluate: () => void;
   runTrace: () => void;
+  runRdf: () => void;
 
   debuggerOpen: boolean;
   openDebugger: () => void;

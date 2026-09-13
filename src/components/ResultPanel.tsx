@@ -38,6 +38,7 @@ const ResultPanel = () => {
     resultMode,
     evaluationResult,
     traceResult,
+    rdfResult,
     resultLoading,
     resultError,
     openDebugger,
@@ -59,7 +60,7 @@ const ResultPanel = () => {
 
         {!resultLoading && !resultError && resultMode === null && (
           <p className="text-sm text-[var(--text-secondary)]">
-            Click Evaluate or Trace to see a result here.
+            Click Evaluate, Trace, or RDF to see a result here.
           </p>
         )}
 
@@ -85,6 +86,21 @@ const ResultPanel = () => {
                 <div className="mt-0.5 break-words">{err.error}</div>
               </div>
             ))}
+          </>
+        )}
+
+        {!resultLoading && resultMode === "rdf" && (
+          <>
+            <p className="text-sm font-medium text-[var(--info)]">JSON-LD</p>
+            {Array.isArray(rdfResult) && rdfResult.length === 0 ? (
+              <p className="text-sm text-[var(--text-secondary)]">
+                No JSON-LD annotations were emitted for this instance.
+              </p>
+            ) : (
+              <pre className="text-xs font-mono border border-[var(--border)] bg-[var(--bg-inset)]/50 rounded-[var(--radius-sm)] px-2 py-1.5 whitespace-pre-wrap break-words">
+                {JSON.stringify(rdfResult, null, 2)}
+              </pre>
+            )}
           </>
         )}
 
