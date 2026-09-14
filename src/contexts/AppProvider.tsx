@@ -98,6 +98,22 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const openDebugger = useCallback(() => setDebuggerOpen(true), []);
   const closeDebugger = useCallback(() => setDebuggerOpen(false), []);
 
+  const [customDebuggerSeed, setCustomDebuggerSeed] = useState<{
+    schema: string;
+    instance: string;
+  } | null>(null);
+  const openCustomDebuggerWithSchema = useCallback(
+    (schema: string, instance: string) => {
+      setCustomDebuggerSeed({ schema, instance });
+      window.location.hash = "#/debugger";
+    },
+    []
+  );
+  const consumeCustomDebuggerSeed = useCallback(
+    () => setCustomDebuggerSeed(null),
+    []
+  );
+
   useEffect(() => {
     if (!selectedSchemaPath) {
       setSchemaMetadata(null);
@@ -275,6 +291,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     debuggerOpen,
     openDebugger,
     closeDebugger,
+    customDebuggerSeed,
+    openCustomDebuggerWithSchema,
+    consumeCustomDebuggerSeed,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

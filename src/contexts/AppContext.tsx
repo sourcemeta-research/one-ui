@@ -58,6 +58,14 @@ type AppContextType = {
   debuggerOpen: boolean;
   openDebugger: () => void;
   closeDebugger: () => void;
+
+  // Lets InstanceEditor hand an edited (unsaved) schema + instance off to
+  // the Custom Debugger, which is the only place able to trace a schema
+  // that isn't the one actually stored on the registry (the registry's
+  // own /schemas/trace endpoint always uses the stored version by path).
+  customDebuggerSeed: { schema: string; instance: string } | null;
+  openCustomDebuggerWithSchema: (schema: string, instance: string) => void;
+  consumeCustomDebuggerSeed: () => void;
 };
 
 export const AppContext = createContext<AppContextType>(

@@ -61,8 +61,8 @@ const DetailPanel = () => {
   const dynamicLocations = Object.entries(schemaLocations?.dynamic ?? {});
 
   return (
-    <div className="flex flex-col">
-      <div className="flex border-b border-[var(--border)] overflow-x-auto">
+    <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex border-b border-[var(--border)] overflow-x-auto shrink-0">
         <TabButton
           tab="dependencies"
           label="Dependencies"
@@ -86,7 +86,7 @@ const DetailPanel = () => {
         />
       </div>
 
-      <div className="p-2 h-48 min-h-32 max-h-128 resize-y overflow-y-auto">
+      <div className="p-2 flex-1 min-h-0 overflow-y-auto">
         {detailLoading && (
           <p className="text-xs text-[var(--text-secondary)] px-1">
             Loading…
