@@ -25,6 +25,7 @@ const InstanceEditor = () => {
     runTrace,
     runRdf,
     resultLoading,
+    openCustomDebuggerWithSchema,
   } = useContext(AppContext);
 
   // Bundled view is fetched separately from the plain schemaContent used
@@ -36,11 +37,22 @@ const InstanceEditor = () => {
   const [bundledLoading, setBundledLoading] = useState(false);
   const [bundledError, setBundledError] = useState<string | null>(null);
 
+  // A local, editable copy of whichever schema view (plain or bundled) is
+  // showing. Evaluate/Trace/RDF validate against the schema already stored
+  // at selectedSchemaPath on the registry, not this draft — editing here is
+  // for exploration only, same as pasting into the Custom Debugger.
+  const [schemaDraft, setSchemaDraft] = useState<string | null>(null);
+
   useEffect(() => {
     setBundled(false);
     setBundledContent(null);
     setBundledError(null);
+    setSchemaDraft(null);
   }, [selectedSchemaPath]);
+
+  useEffect(() => {
+    setSchemaDraft(bundled ? bundledContent : schemaContent);
+  }, [bundled, bundledContent, schemaContent]);
 
   useEffect(() => {
     if (!bundled || !selectedSchemaPath) return;
@@ -64,12 +76,24 @@ const InstanceEditor = () => {
     };
   }, [bundled, registryUrl, selectedSchemaPath]);
 
+  const originalSchema = bundled ? bundledContent : schemaContent;
+  const schemaEdited =
+    schemaDraft !== null && originalSchema !== null && schemaDraft !== originalSchema;
+
+  const handleTrace = () => {
+    if (schemaEdited && schemaDraft) {
+      openCustomDebuggerWithSchema(schemaDraft, instanceText);
+      return;
+    }
+    runTrace();
+  };
+
   if (!selectedSchemaPath) {
     return <IdleState />;
   }
 
   return (
-    <div className="flex flex-col h-full flex-1 min-w-0 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] shadow-[var(--shadow-sm)] overflow-y-auto">
+    <div className="flex flex-col h-full flex-1 min-w-0 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] shadow-[var(--shadow-sm)] overflow-hidden">
       <div className="flex items-start justify-between gap-2 px-3 py-2.5 border-b border-[var(--border)] sticky top-0 z-10 bg-[var(--bg-surface)]">
         <div className="min-w-0 flex flex-col gap-0.5">
           {metadataLoading ? (
@@ -100,11 +124,16 @@ const InstanceEditor = () => {
             Evaluate
           </button>
           <button
-            onClick={runTrace}
+            onClick={handleTrace}
             disabled={resultLoading}
+            title={
+              schemaEdited
+                ? "Opens the Custom Debugger, tracing your edited schema instead of the one stored on the registry"
+                : undefined
+            }
             className="h-8 px-3 text-sm rounded-[var(--radius-sm)] border border-[var(--accent)]/50 bg-[var(--accent)]/12 text-[var(--accent)] hover:bg-[var(--accent)]/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Trace
+            {schemaEdited ? "Trace edited schema →" : "Trace"}
           </button>
           <button
             onClick={runRdf}
@@ -140,18 +169,34 @@ const InstanceEditor = () => {
           Instance
         </button>
         {activeTab === "schema" && (
-          <label
-            title="Show the schema with $ref keywords inlined via JSON Schema Bundling"
-            className="ml-auto mr-2 flex items-center gap-1.5 text-xs text-[var(--text-secondary)] cursor-pointer select-none"
-          >
-            <input
-              type="checkbox"
-              checked={bundled}
-              onChange={(e) => setBundled(e.target.checked)}
-              className="accent-[var(--accent)]"
-            />
-            Bundled
-          </label>
+          <span className="ml-auto mr-2 flex items-center gap-3">
+            <span
+              className={`text-[10px] ${
+                schemaEdited ? "text-[var(--accent)]" : "text-[var(--text-secondary)] opacity-60"
+              }`}
+              title={
+                schemaEdited
+                  ? "Trace will use these edits (opens the Custom Debugger); Evaluate and RDF still validate against the version stored on the registry, since the registry has no equivalent endpoint for those"
+                  : "Editing here doesn't change what Evaluate/Trace/RDF validate against — they use the schema already stored on the registry"
+              }
+            >
+              {schemaEdited
+                ? "edited — Trace uses this, Evaluate/RDF don't"
+                : "edits here don't affect Evaluate/Trace/RDF"}
+            </span>
+            <label
+              title="Show the schema with $ref keywords inlined via JSON Schema Bundling"
+              className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)] cursor-pointer select-none"
+            >
+              <input
+                type="checkbox"
+                checked={bundled}
+                onChange={(e) => setBundled(e.target.checked)}
+                className="accent-[var(--accent)]"
+              />
+              Bundled
+            </label>
+          </span>
         )}
       </div>
 
@@ -176,21 +221,14 @@ const InstanceEditor = () => {
             language="json"
             theme={ONE_UI_MONACO_THEME}
             beforeMount={defineMonacoTheme}
-            value={
-              activeTab === "schema"
-                ? bundled
-                  ? bundledContent ?? ""
-                  : schemaContent ?? ""
-                : instanceText
-            }
+            value={activeTab === "schema" ? schemaDraft ?? "" : instanceText}
             onChange={
-              activeTab === "instance"
-                ? (value) => setInstanceText(value ?? "")
-                : undefined
+              activeTab === "schema"
+                ? (value) => setSchemaDraft(value ?? "")
+                : (value) => setInstanceText(value ?? "")
             }
             options={{
               ...ONE_UI_EDITOR_FONT_OPTIONS,
-              readOnly: activeTab === "schema",
               minimap: { enabled: false },
               fontSize: 14,
               scrollBeyondLastLine: false,
