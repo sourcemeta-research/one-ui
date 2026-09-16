@@ -1,4 +1,5 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
+import type { KeyboardEvent, PointerEvent } from "react";
 import Editor from "@monaco-editor/react";
 import { AppContext } from "../contexts/AppContext";
 import MetadataTable from "./MetadataTable";
@@ -6,6 +7,24 @@ import DetailPanel from "./DetailPanel";
 import { defineMonacoTheme, ONE_UI_EDITOR_FONT_OPTIONS, ONE_UI_MONACO_THEME } from "../utils/monacoTheme";
 import IdleState from "./IdleState";
 import { getSchemaContent } from "../api/one";
+
+// The editor and the DetailPanel below it share the card's height. The editor
+// used to be a fixed 288px, which squeezed the DetailPanel into a thin strip
+// on shorter windows, so the split is now user-adjustable.
+const EDITOR_HEIGHT_KEY = "one-ui:editor-height";
+const DEFAULT_EDITOR_HEIGHT = 288;
+const MIN_EDITOR_HEIGHT = 80;
+const MIN_DETAIL_HEIGHT = 64;
+const KEYBOARD_STEP = 24;
+
+const readStoredEditorHeight = () => {
+  try {
+    const stored = Number(localStorage.getItem(EDITOR_HEIGHT_KEY));
+    return Number.isFinite(stored) && stored > 0 ? stored : DEFAULT_EDITOR_HEIGHT;
+  } catch {
+    return DEFAULT_EDITOR_HEIGHT;
+  }
+};
 
 const InstanceEditor = () => {
   const {
@@ -42,6 +61,89 @@ const InstanceEditor = () => {
   // at selectedSchemaPath on the registry, not this draft — editing here is
   // for exploration only, same as pasting into the Custom Debugger.
   const [schemaDraft, setSchemaDraft] = useState<string | null>(null);
+
+  const cardRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const separatorRef = useRef<HTMLDivElement>(null);
+  // Distance between the pointer and the editor's bottom edge at drag start,
+  // so the split doesn't jump to the pointer when the handle is grabbed.
+  const grabOffsetRef = useRef(0);
+  const [editorHeight, setEditorHeight] = useState(readStoredEditorHeight);
+  const [resizing, setResizing] = useState(false);
+
+  // Keep at least MIN_DETAIL_HEIGHT of the card for the DetailPanel.
+  const clampEditorHeight = (height: number) => {
+    const card = cardRef.current;
+    const editor = editorRef.current;
+    if (!card || !editor) return Math.max(MIN_EDITOR_HEIGHT, height);
+    const cardInnerBottom =
+      card.getBoundingClientRect().top + card.clientTop + card.clientHeight;
+    const available =
+      cardInnerBottom -
+      editor.getBoundingClientRect().top -
+      (separatorRef.current?.offsetHeight ?? 0) -
+      MIN_DETAIL_HEIGHT;
+    return Math.round(
+      Math.max(MIN_EDITOR_HEIGHT, Math.min(height, available))
+    );
+  };
+
+  const commitEditorHeight = (height: number) => {
+    const next = clampEditorHeight(height);
+    setEditorHeight(next);
+    try {
+      localStorage.setItem(EDITOR_HEIGHT_KEY, String(next));
+    } catch {
+      // Storage can be unavailable (private mode); the split still works.
+    }
+  };
+
+  const handleResizeStart = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    if (editorRef.current) {
+      grabOffsetRef.current =
+        event.clientY - editorRef.current.getBoundingClientRect().bottom;
+    }
+    setResizing(true);
+  };
+
+  const handleResizeMove = (event: PointerEvent<HTMLDivElement>) => {
+    if (!resizing || !editorRef.current) return;
+    const top = editorRef.current.getBoundingClientRect().top;
+    setEditorHeight(
+      clampEditorHeight(event.clientY - grabOffsetRef.current - top)
+    );
+  };
+
+  const handleResizeEnd = (event: PointerEvent<HTMLDivElement>) => {
+    if (!resizing) return;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    setResizing(false);
+    commitEditorHeight(editorHeight);
+  };
+
+  const handleResizeKey = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      commitEditorHeight(editorHeight - KEYBOARD_STEP);
+    } else if (event.key === "ArrowDown") {
+      event.preventDefault();
+      commitEditorHeight(editorHeight + KEYBOARD_STEP);
+    }
+  };
+
+  // A stored height from a taller window can overflow a shorter one.
+  useEffect(() => {
+    const card = cardRef.current;
+    if (!card) return;
+    const observer = new ResizeObserver(() =>
+      setEditorHeight((height) => clampEditorHeight(height))
+    );
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, [selectedSchemaPath]);
 
   useEffect(() => {
     setBundled(false);
@@ -93,7 +195,7 @@ const InstanceEditor = () => {
   }
 
   return (
-    <div className="flex flex-col h-full flex-1 min-w-0 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] shadow-[var(--shadow-sm)] overflow-hidden">
+    <div ref={cardRef} className="flex flex-col h-full flex-1 min-w-0 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] shadow-[var(--shadow-sm)] overflow-hidden">
       <div className="flex items-start justify-between gap-2 px-3 py-2.5 border-b border-[var(--border)] sticky top-0 z-10 bg-[var(--bg-surface)]">
         <div className="min-w-0 flex flex-col gap-0.5">
           {metadataLoading ? (
@@ -200,7 +302,11 @@ const InstanceEditor = () => {
         )}
       </div>
 
-      <div className="h-72 shrink-0 border-b border-[var(--border)]">
+      <div
+        ref={editorRef}
+        style={{ height: editorHeight }}
+        className={`shrink-0 ${resizing ? "pointer-events-none" : ""}`}
+      >
         {activeTab === "schema" && bundled && bundledLoading ? (
           <p className="text-sm text-[var(--text-secondary)] p-3">
             Bundling schema…
@@ -236,6 +342,28 @@ const InstanceEditor = () => {
             }}
           />
         )}
+      </div>
+
+      <div
+        ref={separatorRef}
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Resize editor and detail panel"
+        aria-valuenow={editorHeight}
+        aria-valuemin={MIN_EDITOR_HEIGHT}
+        tabIndex={0}
+        title="Drag to resize · double-click to reset"
+        onPointerDown={handleResizeStart}
+        onPointerMove={handleResizeMove}
+        onPointerUp={handleResizeEnd}
+        onPointerCancel={handleResizeEnd}
+        onDoubleClick={() => commitEditorHeight(DEFAULT_EDITOR_HEIGHT)}
+        onKeyDown={handleResizeKey}
+        className={`group relative h-1.5 shrink-0 cursor-row-resize touch-none border-y border-[var(--border)] outline-none transition-colors focus-visible:bg-[var(--accent)]/60 ${
+          resizing ? "bg-[var(--accent)]/60" : "bg-[var(--bg-inset)] hover:bg-[var(--accent)]/40"
+        }`}
+      >
+        <span className="absolute left-1/2 top-1/2 h-0.5 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--border-strong)] group-hover:bg-[var(--accent)]" />
       </div>
 
       <DetailPanel />
