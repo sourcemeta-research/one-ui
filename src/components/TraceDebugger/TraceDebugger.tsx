@@ -5,6 +5,7 @@ import { AppContext } from "../../contexts/AppContext";
 import { getSchemaPositions } from "../../api/one";
 import type { SchemaPositions } from "../../types/one";
 import { defineMonacoTheme, ONE_UI_EDITOR_FONT_OPTIONS, ONE_UI_MONACO_THEME } from "../../utils/monacoTheme";
+import { attachSchemaKeywordLinks } from "../../utils/learnJsonSchemaLinks";
 import { getCollectedAnnotations, getDynamicScope, getOpenFrames } from "../../utils/traceStack";
 import StackVisualizer from "./StackVisualizer";
 import AnnotationsPanel from "../AnnotationsPanel";
@@ -168,8 +169,9 @@ const TraceDebugger = () => {
     instanceEditorRef.current = editorInstance;
   };
 
-  const handleSchemaMount = (editorInstance: MonacoEditor.IStandaloneCodeEditor) => {
+  const handleSchemaMount = (editorInstance: MonacoEditor.IStandaloneCodeEditor, monaco: Monaco) => {
     schemaEditorRef.current = editorInstance;
+    attachSchemaKeywordLinks(editorInstance, monaco);
   };
 
   const beforeMount = (monaco: Monaco) => defineMonacoTheme(monaco);

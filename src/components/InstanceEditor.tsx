@@ -5,6 +5,7 @@ import { AppContext } from "../contexts/AppContext";
 import MetadataTable from "./MetadataTable";
 import DetailPanel from "./DetailPanel";
 import { defineMonacoTheme, ONE_UI_EDITOR_FONT_OPTIONS, ONE_UI_MONACO_THEME } from "../utils/monacoTheme";
+import { attachSchemaKeywordLinks } from "../utils/learnJsonSchemaLinks";
 import IdleState from "./IdleState";
 import { getSchemaContent } from "../api/one";
 
@@ -332,6 +333,9 @@ const InstanceEditor = () => {
               activeTab === "schema"
                 ? (value) => setSchemaDraft(value ?? "")
                 : (value) => setInstanceText(value ?? "")
+            }
+            onMount={
+              activeTab === "schema" ? attachSchemaKeywordLinks : undefined
             }
             options={{
               ...ONE_UI_EDITOR_FONT_OPTIONS,
