@@ -89,7 +89,11 @@ const ResultPanel = () => {
           </>
         )}
 
-        {!resultLoading && resultMode === "rdf" && (
+        {/* Guarded on rdfResult the way the evaluate and trace branches are
+            guarded on theirs: a failed request has no output to show, and
+            rendering it anyway printed a "JSON-LD" heading over the literal
+            text "null" underneath the error message. */}
+        {!resultLoading && resultMode === "rdf" && rdfResult !== null && (
           <>
             <p className="text-sm font-medium text-[var(--info)]">JSON-LD</p>
             {Array.isArray(rdfResult) && rdfResult.length === 0 ? (

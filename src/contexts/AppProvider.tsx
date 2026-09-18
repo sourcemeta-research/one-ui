@@ -128,6 +128,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     setTraceResult(null);
     setRdfResult(null);
     setResultMode(null);
+    // Without this the previous schema's failure (e.g. a 422 from RDF) stays
+    // in the Result panel next to a schema it has nothing to do with.
+    setResultError(null);
     setActiveTab("schema");
 
     getSchemaMetadata(registryUrl, selectedSchemaPath)
@@ -212,6 +215,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     if (!selectedSchemaPath) return;
     setResultLoading(true);
     setResultError(null);
+    setEvaluationResult(null);
     setResultMode("evaluate");
     evaluateSchema(registryUrl, selectedSchemaPath, instanceText)
       .then(setEvaluationResult)
@@ -225,6 +229,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     if (!selectedSchemaPath) return;
     setResultLoading(true);
     setResultError(null);
+    setTraceResult(null);
     setResultMode("trace");
     traceSchema(registryUrl, selectedSchemaPath, instanceText)
       .then(setTraceResult)
@@ -238,6 +243,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     if (!selectedSchemaPath) return;
     setResultLoading(true);
     setResultError(null);
+    // A failed run must not leave the previous run's output on screen.
+    setRdfResult(null);
     setResultMode("rdf");
     let instance: unknown;
     try {
