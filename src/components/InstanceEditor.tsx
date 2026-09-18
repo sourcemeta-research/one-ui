@@ -1,11 +1,14 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent, PointerEvent } from "react";
 import Editor from "@monaco-editor/react";
+import type { editor as MonacoEditor } from "monaco-editor";
 import { AppContext } from "../contexts/AppContext";
 import MetadataTable from "./MetadataTable";
 import DetailPanel from "./DetailPanel";
 import { defineMonacoTheme, ONE_UI_EDITOR_FONT_OPTIONS, ONE_UI_MONACO_THEME } from "../utils/monacoTheme";
 import { attachSchemaKeywordLinks } from "../utils/learnJsonSchemaLinks";
+import { computePropertyClaims } from "../utils/propertyClaims";
+import { applyPropertyClaimDecorations } from "../utils/propertyClaimDecorations";
 import IdleState from "./IdleState";
 import { getSchemaContent } from "../api/one";
 
@@ -46,7 +49,10 @@ const InstanceEditor = () => {
     runRdf,
     resultLoading,
     openCustomDebuggerWithSchema,
+    traceResult,
   } = useContext(AppContext);
+
+  const instanceEditorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
 
   // Bundled view is fetched separately from the plain schemaContent used
   // elsewhere (e.g. the Trace Debugger's highlighting, which relies on
@@ -179,6 +185,18 @@ const InstanceEditor = () => {
     };
   }, [bundled, registryUrl, selectedSchemaPath]);
 
+  // Re-paint the additionalProperties/unevaluatedProperties highlight
+  // whenever a fresh Trace result comes in while the Instance tab is
+  // already mounted (switching tabs remounts the editor and re-runs
+  // onMount instead, which applies it from scratch).
+  useEffect(() => {
+    if (activeTab !== "instance" || !instanceEditorRef.current) return;
+    applyPropertyClaimDecorations(
+      instanceEditorRef.current,
+      traceResult ? computePropertyClaims(traceResult.steps) : []
+    );
+  }, [activeTab, traceResult]);
+
   const originalSchema = bundled ? bundledContent : schemaContent;
   const schemaEdited =
     schemaDraft !== null && originalSchema !== null && schemaDraft !== originalSchema;
@@ -271,6 +289,25 @@ const InstanceEditor = () => {
         >
           Instance
         </button>
+        {activeTab === "instance" && traceResult && (
+          <span
+            className="ml-auto mr-2 flex items-center gap-2.5 text-[10px] text-[var(--text-secondary)]"
+            title="From the last Trace run: which properties matched properties/patternProperties, versus which fell to additionalProperties/unevaluatedProperties"
+          >
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: "color-mix(in srgb, var(--accent) 45%, transparent)" }} />
+              declared
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-sm bg-[var(--warning)]" />
+              extra (allowed)
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-sm bg-[var(--danger)]" />
+              extra (rejected)
+            </span>
+          </span>
+        )}
         {activeTab === "schema" && (
           <span className="ml-auto mr-2 flex items-center gap-3">
             <span
@@ -335,7 +372,15 @@ const InstanceEditor = () => {
                 : (value) => setInstanceText(value ?? "")
             }
             onMount={
-              activeTab === "schema" ? attachSchemaKeywordLinks : undefined
+              activeTab === "schema"
+                ? attachSchemaKeywordLinks
+                : (editorInstance) => {
+                    instanceEditorRef.current = editorInstance;
+                    applyPropertyClaimDecorations(
+                      editorInstance,
+                      traceResult ? computePropertyClaims(traceResult.steps) : []
+                    );
+                  }
             }
             options={{
               ...ONE_UI_EDITOR_FONT_OPTIONS,

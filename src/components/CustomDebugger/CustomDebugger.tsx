@@ -5,6 +5,8 @@ import { AppContext } from "../../contexts/AppContext";
 import { traceCustomSchema } from "../../api/one";
 import { defineMonacoTheme, ONE_UI_EDITOR_FONT_OPTIONS, ONE_UI_MONACO_THEME } from "../../utils/monacoTheme";
 import { attachSchemaKeywordLinks } from "../../utils/learnJsonSchemaLinks";
+import { computePropertyClaims } from "../../utils/propertyClaims";
+import { applyPropertyClaimDecorations } from "../../utils/propertyClaimDecorations";
 import { getCollectedAnnotations, getDynamicScope, getOpenFrames } from "../../utils/traceStack";
 import { computeJsonPositions } from "../../utils/jsonPointerPositions";
 import type { SchemaPositions, TraceResult } from "../../types/one";
@@ -216,6 +218,11 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
     const timer = setTimeout(() => setStepIndex((i) => i + 1), PLAY_INTERVAL_MS);
     return () => clearTimeout(timer);
   }, [isPlaying, stepIndex, steps.length]);
+
+  useEffect(() => {
+    if (!instanceEditorRef.current) return;
+    applyPropertyClaimDecorations(instanceEditorRef.current, computePropertyClaims(steps));
+  }, [steps]);
 
   useEffect(() => {
     const editorInstance = instanceEditorRef.current;
@@ -515,7 +522,10 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
               beforeMount={beforeMount}
               value={instanceText}
               onChange={(value) => setInstanceText(value ?? "")}
-              onMount={(editorInstance) => (instanceEditorRef.current = editorInstance)}
+              onMount={(editorInstance) => {
+                instanceEditorRef.current = editorInstance;
+                applyPropertyClaimDecorations(editorInstance, computePropertyClaims(steps));
+              }}
               options={{ ...ONE_UI_EDITOR_FONT_OPTIONS, minimap: { enabled: false }, fontSize: 13.5, stickyScroll: { enabled: false } }}
             />
           </div>
