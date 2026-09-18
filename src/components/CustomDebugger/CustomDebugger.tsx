@@ -4,6 +4,7 @@ import type { editor as MonacoEditor } from "monaco-editor";
 import { AppContext } from "../../contexts/AppContext";
 import { traceCustomSchema } from "../../api/one";
 import { defineMonacoTheme, ONE_UI_EDITOR_FONT_OPTIONS, ONE_UI_MONACO_THEME } from "../../utils/monacoTheme";
+import { attachSchemaKeywordLinks } from "../../utils/learnJsonSchemaLinks";
 import { getCollectedAnnotations, getDynamicScope, getOpenFrames } from "../../utils/traceStack";
 import { computeJsonPositions } from "../../utils/jsonPointerPositions";
 import type { SchemaPositions, TraceResult } from "../../types/one";
@@ -483,7 +484,10 @@ const CustomDebugger = ({ onClose }: { onClose: () => void }) => {
                   ? (value) => setSchemaText(value ?? "")
                   : undefined
               }
-              onMount={(editorInstance) => (schemaEditorRef.current = editorInstance)}
+              onMount={(editorInstance, monaco) => {
+                schemaEditorRef.current = editorInstance;
+                attachSchemaKeywordLinks(editorInstance, monaco);
+              }}
               options={{
                 ...ONE_UI_EDITOR_FONT_OPTIONS,
                 readOnly: activeSchemaTab !== "local",
