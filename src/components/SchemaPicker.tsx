@@ -28,9 +28,14 @@ const SchemaPicker = () => {
   );
   const [error, setError] = useState<string | null>(null);
 
+  const [prevRegistryUrl, setPrevRegistryUrl] = useState(registryUrl);
+  if (registryUrl !== prevRegistryUrl) {
+    setPrevRegistryUrl(registryUrl);
+    setError(null);
+  }
+
   useEffect(() => {
     let cancelled = false;
-    setError(null);
     listDirectory(registryUrl)
       .then((listing) => {
         if (!cancelled) {
@@ -46,9 +51,16 @@ const SchemaPicker = () => {
     };
   }, [registryUrl]);
 
-  useEffect(() => {
+  const [prevQuery, setPrevQuery] = useState(query);
+  if (query !== prevQuery) {
+    setPrevQuery(query);
     if (!query.trim()) {
       setSearchResults(null);
+    }
+  }
+
+  useEffect(() => {
+    if (!query.trim()) {
       return;
     }
     const handle = setTimeout(() => {

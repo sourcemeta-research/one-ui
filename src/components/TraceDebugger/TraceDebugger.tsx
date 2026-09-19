@@ -63,11 +63,16 @@ const TraceDebugger = () => {
   );
   const dynamicScope = useMemo(() => getDynamicScope(openFrames), [openFrames]);
 
-  useEffect(() => {
+  const [prevSchemaPath, setPrevSchemaPath] = useState<string | null>(null);
+  if (selectedSchemaPath !== prevSchemaPath) {
+    setPrevSchemaPath(selectedSchemaPath);
     if (!selectedSchemaPath) {
       setSchemaPositions(null);
-      return;
     }
+  }
+
+  useEffect(() => {
+    if (!selectedSchemaPath) return;
     let cancelled = false;
     getSchemaPositions(registryUrl, selectedSchemaPath)
       .then((positions) => {
@@ -81,17 +86,25 @@ const TraceDebugger = () => {
     };
   }, [registryUrl, selectedSchemaPath]);
 
+  if (isPlaying && stepIndex >= steps.length - 1) {
+    setIsPlaying(false);
+  }
+
   useEffect(() => {
-    if (!isPlaying) return;
-    if (stepIndex >= steps.length - 1) {
-      setIsPlaying(false);
-      return;
-    }
+    if (!isPlaying || stepIndex >= steps.length - 1) return;
     const timer = setTimeout(() => setStepIndex((i) => i + 1), PLAY_INTERVAL_MS);
     return () => clearTimeout(timer);
   }, [isPlaying, stepIndex, steps.length]);
 
-  const [schemaHighlightNote, setSchemaHighlightNote] = useState<string | null>(null);
+  let schemaHighlightNote: string | null = null;
+  if (currentStep && schemaPositions && schemaMetadata) {
+    const { resource, pointer } = splitKeywordLocation(currentStep.keywordLocation);
+    const belongsToCurrentSchema = resource === schemaMetadata.identifier;
+    const position = belongsToCurrentSchema ? schemaPositions[pointer] : undefined;
+    if (!position && !belongsToCurrentSchema) {
+      schemaHighlightNote = `This keyword comes from a referenced schema: ${resource}`;
+    }
+  }
 
   useEffect(() => {
     const editorInstance = instanceEditorRef.current;
@@ -124,7 +137,7 @@ const TraceDebugger = () => {
   useEffect(() => {
     const editorInstance = schemaEditorRef.current;
     if (!editorInstance || !currentStep || !schemaPositions || !schemaMetadata) {
-      setSchemaHighlightNote(null);
+      schemaDecorationsRef.current?.clear();
       return;
     }
 
@@ -134,16 +147,8 @@ const TraceDebugger = () => {
 
     schemaDecorationsRef.current?.clear();
 
-    if (!position) {
-      setSchemaHighlightNote(
-        belongsToCurrentSchema
-          ? null
-          : `This keyword comes from a referenced schema: ${resource}`
-      );
-      return;
-    }
+    if (!position) return;
 
-    setSchemaHighlightNote(null);
     const range = toMonacoRange(position);
     const className =
       currentStep.type === "fail"
