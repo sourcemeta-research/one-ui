@@ -145,22 +145,37 @@ const InstanceEditor = () => {
     return () => observer.disconnect();
   }, [selectedSchemaPath]);
 
-  useEffect(() => {
+  const [prevSelectedSchemaPath, setPrevSelectedSchemaPath] = useState<string | null>(null);
+  if (selectedSchemaPath !== prevSelectedSchemaPath) {
+    setPrevSelectedSchemaPath(selectedSchemaPath);
     setBundled(false);
     setBundledContent(null);
     setBundledError(null);
     setSchemaDraft(null);
-  }, [selectedSchemaPath]);
+  }
 
-  useEffect(() => {
+  const [prevSchemaSource, setPrevSchemaSource] = useState({ bundled, bundledContent, schemaContent });
+  if (
+    bundled !== prevSchemaSource.bundled ||
+    bundledContent !== prevSchemaSource.bundledContent ||
+    schemaContent !== prevSchemaSource.schemaContent
+  ) {
+    setPrevSchemaSource({ bundled, bundledContent, schemaContent });
     setSchemaDraft(bundled ? bundledContent : schemaContent);
-  }, [bundled, bundledContent, schemaContent]);
+  }
+
+  const [prevFetchDeps, setPrevFetchDeps] = useState({ bundled, selectedSchemaPath });
+  if (bundled !== prevFetchDeps.bundled || selectedSchemaPath !== prevFetchDeps.selectedSchemaPath) {
+    setPrevFetchDeps({ bundled, selectedSchemaPath });
+    if (bundled && selectedSchemaPath) {
+      setBundledLoading(true);
+      setBundledError(null);
+    }
+  }
 
   useEffect(() => {
     if (!bundled || !selectedSchemaPath) return;
     let cancelled = false;
-    setBundledLoading(true);
-    setBundledError(null);
     getSchemaContent(registryUrl, selectedSchemaPath, { bundle: true })
       .then((content) => {
         if (!cancelled) setBundledContent(content);

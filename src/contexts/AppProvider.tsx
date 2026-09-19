@@ -45,9 +45,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const [registryHealthy, setRegistryHealthy] = useState<boolean | null>(null);
 
+  const [prevRegistryUrl, setPrevRegistryUrl] = useState(registryUrl);
+  if (registryUrl !== prevRegistryUrl) {
+    setPrevRegistryUrl(registryUrl);
+    setRegistryHealthy(null);
+  }
+
   useEffect(() => {
     let cancelled = false;
-    setRegistryHealthy(null);
     checkRegistryHealth(registryUrl).then((healthy) => {
       if (!cancelled) setRegistryHealthy(healthy);
     });
@@ -114,24 +119,42 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     []
   );
 
-  useEffect(() => {
+  const [prevSelectedSchemaPath, setPrevSelectedSchemaPath] = useState<string | null>(null);
+  if (selectedSchemaPath !== prevSelectedSchemaPath) {
+    setPrevSelectedSchemaPath(selectedSchemaPath);
     if (!selectedSchemaPath) {
       setSchemaMetadata(null);
       setSchemaContent(null);
+    } else {
+      setMetadataLoading(true);
+      setMetadataError(null);
+      setEvaluationResult(null);
+      setTraceResult(null);
+      setRdfResult(null);
+      setResultMode(null);
+      // Without this the previous schema's failure (e.g. a 422 from RDF) stays
+      // in the Result panel next to a schema it has nothing to do with.
+      setResultError(null);
+      setActiveTab("schema");
+
+      setSchemaContentLoading(true);
+      setSchemaContentError(null);
+
+      setDetailLoading(true);
+      setDependencies(null);
+      setDependents(null);
+      setHealthReport(null);
+      setSchemaStats(null);
+      setSchemaLocations(null);
+    }
+  }
+
+  useEffect(() => {
+    if (!selectedSchemaPath) {
       return;
     }
 
     let cancelled = false;
-    setMetadataLoading(true);
-    setMetadataError(null);
-    setEvaluationResult(null);
-    setTraceResult(null);
-    setRdfResult(null);
-    setResultMode(null);
-    // Without this the previous schema's failure (e.g. a 422 from RDF) stays
-    // in the Result panel next to a schema it has nothing to do with.
-    setResultError(null);
-    setActiveTab("schema");
 
     getSchemaMetadata(registryUrl, selectedSchemaPath)
       .then((metadata) => {
@@ -155,8 +178,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         if (!cancelled) setMetadataLoading(false);
       });
 
-    setSchemaContentLoading(true);
-    setSchemaContentError(null);
     getSchemaContent(registryUrl, selectedSchemaPath)
       .then((content) => {
         if (!cancelled) setSchemaContent(content);
@@ -172,12 +193,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         if (!cancelled) setSchemaContentLoading(false);
       });
 
-    setDetailLoading(true);
-    setDependencies(null);
-    setDependents(null);
-    setHealthReport(null);
-    setSchemaStats(null);
-    setSchemaLocations(null);
     Promise.all([
       getSchemaDependencies(registryUrl, selectedSchemaPath),
       getSchemaDependents(registryUrl, selectedSchemaPath),
